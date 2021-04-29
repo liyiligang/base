@@ -1,4 +1,4 @@
-module base
+module github.com/liyiligang/base
 
 go 1.13
 

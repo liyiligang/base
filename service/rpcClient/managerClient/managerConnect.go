@@ -1,10 +1,10 @@
 package managerClient
 
 import (
-	"base/commonConst"
-	"base/component/Jlog"
-	"base/component/Jrpc"
-	"base/protoFiles/protoManage"
+	"github.com/liyiligang/base/commonConst"
+	"github.com/liyiligang/base/component/Jlog"
+	"github.com/liyiligang/base/component/Jrpc"
+	"github.com/liyiligang/base/protoFiles/protoManage"
 )
 
 type RpcStreamManageConnect struct {

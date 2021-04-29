@@ -6,13 +6,13 @@
 package managerClient
 
 import (
-	"base/commonConst"
-	"base/component/Jlog"
-	"base/component/Jrpc"
-	"base/component/Jtool"
-	"base/protoFiles/protoManage"
 	"errors"
 	"github.com/gogo/protobuf/proto"
+	"github.com/liyiligang/base/commonConst"
+	"github.com/liyiligang/base/component/Jlog"
+	"github.com/liyiligang/base/component/Jrpc"
+	"github.com/liyiligang/base/component/Jtool"
+	"github.com/liyiligang/base/protoFiles/protoManage"
 	"google.golang.org/grpc"
 	"reflect"
 	"runtime"
