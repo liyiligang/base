@@ -6,11 +6,11 @@
 package rpcClient
 
 import (
+	"base/commonConst"
+	"base/component/Jlog"
+	"base/component/Jtool"
 	"context"
 	"errors"
-	"github.com/jinyun/base/commonConst"
-	"github.com/jinyun/base/component/Jlog"
-	"github.com/jinyun/base/component/Jtool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"strconv"

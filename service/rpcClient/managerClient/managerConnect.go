@@ -1,10 +1,10 @@
 package managerClient
 
 import (
-	"github.com/jinyun/base/commonConst"
-	"github.com/jinyun/base/component/Jlog"
-	"github.com/jinyun/base/component/Jrpc"
-	"github.com/jinyun/base/protoFiles/protoManage"
+	"base/commonConst"
+	"base/component/Jlog"
+	"base/component/Jrpc"
+	"base/protoFiles/protoManage"
 )
 
 type RpcStreamManageConnect struct {
