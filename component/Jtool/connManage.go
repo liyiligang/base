@@ -100,6 +100,16 @@ func (connManage *ConnManage) IsExist(id interface{}) bool {
 	return ok
 }
 
+func (connManage *ConnManage) IsExistDelayCheck(id interface{}, interval time.Duration, repeatNum int) bool {
+	for i:=0; i<repeatNum; i++ {
+		if !connManage.IsExist(id) {
+			return false
+		}
+		time.Sleep(interval)
+	}
+	return connManage.IsExist(id)
+}
+
 func (connManage *ConnManage) LoadAll(f func(key, value interface{}) bool) {
 	connManage.serverConnMap.Range(f)
 }

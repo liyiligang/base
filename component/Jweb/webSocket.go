@@ -9,7 +9,6 @@ import (
 	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	"net"
 	"net/http"
 	"time"
 )
@@ -63,7 +62,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func (config *WebsocketConfig) WsHandle(c *gin.Context) {
-	login := c.Query("login")
+	login := c.Query("parameter")
 	wsConnect(c, *config, login, c.ClientIP())
 }
 
@@ -118,6 +117,7 @@ func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, cl
 
 // 连接关闭回调
 func (ws *WebsocketConn) closeHandler(code int, text string) error {
+	ws.sendClose()
 	ws.config.Call.WebsocketClose(ws, code, text)
 	return nil
 }
@@ -182,48 +182,39 @@ func (ws *WebsocketConn) readMessage() {
 		ws.conn.SetReadDeadline(ws.GetDeadline(ws.config.ReadWaitTime))
 		_, message, err := ws.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway){
 				ws.config.Call.WebsocketError("WebSocket读取错误", err)
-			} else if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
-				ws.closeHandler(0, "WebSocket超时")
-				ws.config.Call.WebsocketError("WebSocket超时, 连接断开", err)
+				ws.Close()
 			}
-			break
+			return
 		}
 		ws.config.Call.WebsocketReceiver(ws, &message)
 	}
-
-	ws.sendClose()
-	ws.conn.Close()
 }
 
 // 写Websocket消息
 func (ws *WebsocketConn) writeMessage() {
-	defer ws.conn.Close()
 	for {
 		select {
 		case message, ok := <-ws.send:
 			if !ok {
 				ws.config.Call.WebsocketError("WebSocket读取send chan失败", nil)
-				return
+				continue
 			}
-
 			ws.conn.SetWriteDeadline(ws.GetDeadline(ws.config.WriteWaitTime))
 			err := ws.conn.WriteMessage(websocket.BinaryMessage, message)
 			if err != nil {
 				ws.config.Call.WebsocketError("WebSocket发送失败", err)
-				//return
 			}
 		case preMessage, ok := <-ws.sendPre:
 			if !ok {
 				ws.config.Call.WebsocketError("WebSocket广播读取send chan失败", nil)
-				return
+				continue
 			}
 			ws.conn.SetWriteDeadline(ws.GetDeadline(ws.config.WriteWaitTime))
 			err := ws.conn.WritePreparedMessage(preMessage)
 			if err != nil {
 				ws.config.Call.WebsocketError("WebSocket_Prepared发送失败", err)
-				//return
 			}
 		case <-ws.sendCtx.Done():
 			return
