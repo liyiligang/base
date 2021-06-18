@@ -23,8 +23,8 @@ type Discovery struct {
 	DiscoveryWatchNodeMap   map[string]*DiscoveryWatchNode
 }
 
-func (discovery *Discovery) Init(config DiscoveryInitConfig) error {
-	discovery.Config = config
+func DiscoveryInit(config DiscoveryInitConfig) (*Discovery, error) {
+	discovery := Discovery{Config: config}
 	if config.LogWrite != nil {
 		clientv3.SetLogger(grpclog.NewLoggerV2(config.LogWrite, config.LogWrite, config.LogWrite))
 	}
@@ -33,12 +33,12 @@ func (discovery *Discovery) Init(config DiscoveryInitConfig) error {
 		DialTimeout: time.Duration(discovery.Config.ConnectTimeout) * time.Second,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	discovery.DiscoveryWatchConfigMap = make(map[string]*DiscoveryConfig)
 	discovery.DiscoveryWatchNodeMap = make(map[string]*DiscoveryWatchNode)
 	discovery.Client = client
-	return nil
+	return &discovery, nil
 }
 
 func (discovery *Discovery) getRequestContext() context.Context {

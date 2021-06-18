@@ -16,14 +16,12 @@ func ReadConfigFromPath(config interface{}, path string) {
 	viperPath.SetConfigName("config")
 	viperPath.SetConfigType("toml")
 	if path == "" {
-		viperPath.AddConfigPath(".")
-	} else {
-		viperPath.AddConfigPath(path)
+		path = "."
 	}
-
+	viperPath.AddConfigPath(path)
 	if err := viperPath.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Fatal("找不到本地配置文件" + path + "/Jconfig.toml")
+			log.Fatal("找不到本地配置文件: " + path + "/Jconfig.toml")
 		} else {
 			log.Fatal("读取本地配置文件错误", "err: ", err)
 		}

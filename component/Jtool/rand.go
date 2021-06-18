@@ -27,3 +27,13 @@ func GetRandInt(low int, high int) (int, error) {
 	}
 	return rand.Intn(int(high-low)) + low, nil
 }
+
+func GetRandChinese(min int, max int) string {
+	len, _ := GetRandInt(min, max)
+	c := make([]rune, len)
+	for i := range c {
+		h ,_ := GetRandInt(19968,40869)
+		c[i]=rune(int64(h))
+	}
+	return string(c)
+}

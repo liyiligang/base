@@ -24,7 +24,7 @@ func GetPrivateIP() string {
 
 // 获取外网IP地址
 func GetPublicIP() string {
-	resp, err := http.Get("http://myexternalip.com/raw")
+	resp, err := http.Get("http://ip.dhcp.cn/?ip")
 	if err != nil {
 		return ""
 	}

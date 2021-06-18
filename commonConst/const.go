@@ -44,6 +44,3 @@ type CommonNodeData struct {
 	Data         interface{}
 }
 
-type GetwayNodeData struct {
-	WebPort string
-}
