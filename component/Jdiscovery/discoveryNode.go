@@ -3,8 +3,7 @@ package Jdiscovery
 import (
 	"context"
 	"errors"
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/client/v3"
 )
 
 type DiscoveryNode struct {
@@ -83,9 +82,9 @@ func (discovery *Discovery) getNodeWatch(watchNode *DiscoveryWatchNode) error {
 func (discovery *Discovery) startNodeWatch(watchNode *DiscoveryWatchNode) {
 	discovery.WatchData(watchNode.nodeCtx, watchNode.NodeKey, func(ev *clientv3.Event) {
 		switch ev.Type {
-		case mvccpb.PUT:
+		case clientv3.EventTypePut:
 			watchNode.NodeCall.NodeConnect(ev.Kv.Value)
-		case mvccpb.DELETE:
+		case clientv3.EventTypeDelete:
 			watchNode.NodeCall.NodeDisconnect(ev.PrevKv.Value)
 		}
 	})

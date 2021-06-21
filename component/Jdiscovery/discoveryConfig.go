@@ -3,8 +3,7 @@ package Jdiscovery
 import (
 	"context"
 	"errors"
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/mvcc/mvccpb"
+	"go.etcd.io/etcd/client/v3"
 )
 
 type discoveryConfigCall func(oldConfig []byte, newConfig []byte)
@@ -54,13 +53,13 @@ func (discovery *Discovery) SetConfig(configKey string, data string) error {
 func (discovery *Discovery) startConfigWatch(config *DiscoveryConfig) {
 	discovery.WatchData(config.configCtx, config.ConfigKey, func(ev *clientv3.Event) {
 		switch ev.Type {
-		case mvccpb.PUT:
+		case clientv3.EventTypePut:
 			var preData []byte
 			if ev.PrevKv != nil {
 				preData = ev.PrevKv.Value
 			}
 			config.ConfigCall(preData, ev.Kv.Value)
-		case mvccpb.DELETE:
+		case clientv3.EventTypeDelete:
 			config.ConfigCall(ev.PrevKv.Value, nil)
 		}
 	})

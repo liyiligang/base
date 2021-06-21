@@ -20,16 +20,24 @@ import (
 
 const ConstRpcMetadata = "auth-bin"
 
-type RpcInitConfig struct {
+type RpcBaseConfig struct {
 	Addr           string
 	PublicKeyPath  string
+}
+
+type RpcServerConfig struct {
+	RpcBaseConfig
 	PrivateKeyPath string
-	CertName       string
-	Auth           []byte
-	ConnectTimeOut time.Duration
 	RegisterCall   func(*grpc.Server)
 	LogWrite 	   io.Writer
 	ErrorCall      func(str string, keysAndValues ...interface{})
+}
+
+type RpcClientConfig struct {
+	RpcBaseConfig
+	CertName       string
+	Auth           []byte
+	ConnectTimeOut time.Duration
 }
 
 type RpcParm struct {
@@ -40,7 +48,7 @@ type RpcParm struct {
 	RpcClientAddr      		string
 }
 
-func GrpcServerInit(config RpcInitConfig) (*grpc.Server, error) {
+func GrpcServerInit(config RpcServerConfig) (*grpc.Server, error) {
 	lis, err := net.Listen("tcp", config.Addr)
 	if err != nil {
 		return nil, err
@@ -65,7 +73,7 @@ func GrpcServerInit(config RpcInitConfig) (*grpc.Server, error) {
 	return s, nil
 }
 
-func GrpcClientInit(config RpcInitConfig) (*grpc.ClientConn, error) {
+func GrpcClientInit(config RpcClientConfig) (*grpc.ClientConn, error) {
 	creds, err := credentials.NewClientTLSFromFile(config.PublicKeyPath, config.CertName)
 	if err != nil {
 		return nil, err

@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const WebsocketCloseByServer = 4000
+
 // Websocket接口配置
 type WebsocketFunc interface {
 	WebsocketConnect(conn *WebsocketConn) (interface{}, error)
@@ -91,17 +93,9 @@ func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, cl
 	conn.conn.SetPingHandler(conn.pingHandler)
 	conn.conn.SetPongHandler(conn.pongHandler)
 
-	closeErrConn := func(err error) {
-		wErr := c.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4000, err.Error()), conn.GetDeadline(config.WriteWaitTime))
-		if wErr != nil {
-			config.Call.WebsocketError("WebSocket关闭失败", wErr)
-		}
-		c.Close()
-	}
-
 	id, err := conn.config.Call.WebsocketConnect(&conn)
 	if err != nil {
-		closeErrConn(err)
+		conn.closeConn(err.Error())
 		return
 	}
 
@@ -110,7 +104,7 @@ func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, cl
 	conn.connBindVal = id
 	err = conn.config.Call.WebsocketConnected(&conn)
 	if err != nil {
-		closeErrConn(err)
+		conn.closeConn(err.Error())
 		return
 	}
 }
@@ -136,8 +130,17 @@ func (ws *WebsocketConn) pongHandler(pongData string) error {
 }
 
 // 主动关闭连接
-func (ws *WebsocketConn) Close() error {
-	ws.closeHandler(0, "服务端主动断开连接")
+func (ws *WebsocketConn) Close(msg string) error {
+	ws.closeHandler(WebsocketCloseByServer, msg)
+	return ws.closeConn(msg)
+}
+
+// 关闭连接
+func (ws *WebsocketConn) closeConn(errMsg string) error {
+	err := ws.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(WebsocketCloseByServer, errMsg), ws.GetDeadline(ws.config.WriteWaitTime))
+	if err != nil {
+		ws.config.Call.WebsocketError("WebSocket关闭失败: ", err)
+	}
 	return ws.conn.Close()
 }
 
@@ -184,7 +187,7 @@ func (ws *WebsocketConn) readMessage() {
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway){
 				ws.config.Call.WebsocketError("WebSocket读取错误", err)
-				ws.Close()
+				ws.Close(err.Error())
 			}
 			return
 		}
