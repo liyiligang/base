@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"go.etcd.io/etcd/client/v3"
-	"google.golang.org/grpc/grpclog"
-	"io"
+	"sync"
 	"time"
 )
 
@@ -13,21 +12,18 @@ type DiscoveryInitConfig struct {
 	EtcdAddr       string
 	ConnectTimeout int
 	RequestTimeout int
-	LogWrite 	   io.Writer
 }
 
 type Discovery struct {
 	Client                  *clientv3.Client
 	Config                  DiscoveryInitConfig
+	discoveryNodeMap 		sync.Map
 	DiscoveryWatchConfigMap map[string]*DiscoveryConfig
 	DiscoveryWatchNodeMap   map[string]*DiscoveryWatchNode
 }
 
 func DiscoveryInit(config DiscoveryInitConfig) (*Discovery, error) {
 	discovery := Discovery{Config: config}
-	if config.LogWrite != nil {
-		clientv3.SetLogger(grpclog.NewLoggerV2(config.LogWrite, config.LogWrite, config.LogWrite))
-	}
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{discovery.Config.EtcdAddr},
 		DialTimeout: time.Duration(discovery.Config.ConnectTimeout) * time.Second,

@@ -26,28 +26,62 @@ type DiscoveryWatchNode struct {
 }
 
 func (discovery *Discovery) RegisterNode(node *DiscoveryNode) error {
-	leaseID, err := discovery.getNodeStateGrantID(node.NodeKeepLive)
+	leaseID, cancel, err := discovery.getNodeStateGrantID(node.NodeKeepLive)
 	if err != nil {
 		return err
 	}
-	return discovery.SetData(node.NodeKey, string(node.NodeData), clientv3.WithLease(leaseID))
+	err = discovery.SetData(node.NodeKey, string(node.NodeData), clientv3.WithLease(leaseID))
+	if err != nil {
+		return err
+	}
+	discovery.storeNode(node.NodeKey, cancel)
+	return nil
 }
 
 func (discovery *Discovery) UnRegisterNode(nodeKey string) error {
 	_, err := discovery.Client.Delete(discovery.getRequestContext(), nodeKey)
-	return err
+	if err != nil {
+		return err
+	}
+	discovery.delNode(nodeKey)
+	return nil
 }
 
-func (discovery *Discovery) getNodeStateGrantID(nodeKeepLive int64) (clientv3.LeaseID, error) {
+func (discovery *Discovery) getNodeStateGrantID(nodeKeepLive int64) (clientv3.LeaseID, context.CancelFunc, error) {
 	resp, err := discovery.Client.Grant(discovery.getRequestContext(), nodeKeepLive)
 	if err != nil {
-		return resp.ID, err
+		return resp.ID, nil, err
 	}
-	_, err = discovery.Client.KeepAlive(context.Background(), resp.ID)
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := discovery.Client.KeepAlive(ctx, resp.ID)
 	if err != nil {
-		return resp.ID, err
+		return resp.ID, nil, err
 	}
-	return resp.ID, nil
+	go func() {
+		for {
+			_, ok := <-ch
+			if !ok {
+				return
+			}
+		}
+	}()
+	return resp.ID, cancel, nil
+}
+
+func (discovery *Discovery) storeNode(nodeKey string, cancel context.CancelFunc) {
+	oldCancel, ok := discovery.discoveryNodeMap.Load(nodeKey)
+	if ok && cancel != nil {
+		oldCancel.(context.CancelFunc)()
+	}
+	discovery.discoveryNodeMap.Store(nodeKey, cancel)
+}
+
+func (discovery *Discovery) delNode(nodeKey string) {
+	cancel, ok := discovery.discoveryNodeMap.Load(nodeKey)
+	if ok && cancel != nil {
+		cancel.(context.CancelFunc)()
+	}
+	discovery.discoveryNodeMap.Delete(nodeKey)
 }
 
 func (discovery *Discovery) RegisterNodeWatch(watchNode *DiscoveryWatchNode) error {
