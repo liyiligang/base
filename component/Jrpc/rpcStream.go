@@ -178,13 +178,13 @@ func (rpc *RpcStream) writeMessage(ctx context.Context, send func(m interface{})
 			return
 		case message, ok := <-rpc.send:
 			if !ok {
-				rpc.call.RpcStreamError("rpc send读取错误", nil)
+				rpc.call.RpcStreamError("rpc send error", errors.New("send chan is close"))
 				return
 			}
 			err := send(message)
 			if err != nil {
 				if !errors.Is(err, io.EOF){
-					rpc.call.RpcStreamError("rpc sendMessage 关闭",  err)
+					rpc.call.RpcStreamError("rpc send error: ",  err)
 				}
 				return
 			}
