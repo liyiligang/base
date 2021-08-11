@@ -17,7 +17,6 @@ import (
 type RpcKeepaliveCall interface {
 	RpcServeConnected(client *RpcKeepalive, isReConnect bool)
 	RpcServeDisconnected(client *RpcKeepalive, isCloseByUser bool)
-	RpcKeepaliveError(text string, err error)
 }
 
 type RpcKeepalive struct {
@@ -64,10 +63,6 @@ func (rpc *RpcKeepalive) runRpcKeepalive() {
 		select {
 		case <-ctx.Done():
 			rpc.call.RpcServeDisconnected(rpc, true)
-			err := rpc.Conn.Close()
-			if err != nil {
-				rpc.call.RpcKeepaliveError("rpc close error: ", err)
-			}
 			return
 		default:
 			state := rpc.Conn.GetState()
