@@ -90,3 +90,20 @@ func RunesToBytes(data []byte) []byte {
 	}
 	return b
 }
+
+//any slice to interface slice
+func SliceToInterfaceSlice(data interface{}) []interface{} {
+	val := reflect.ValueOf(data)
+	if val.Kind() != reflect.Slice {
+		return nil
+	}
+	valLen := val.Len()
+	if valLen == 0 {
+		return nil
+	}
+	itemList := make([]interface{}, valLen)
+	for i := 0; i < valLen; i++{
+		itemList[i] = val.Index(i).Interface()
+	}
+	return itemList
+}

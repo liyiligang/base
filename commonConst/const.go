@@ -11,16 +11,6 @@ const ConstTimeFormat = "2006-01-02 15:04:05"
 const ManageNodeID = 0
 const ManageNodeTypeID = 0
 
-type OrderType int32
-
-const (
-	UnKnowOrder     OrderType = 0
-	WebsocketOrder  OrderType = 1
-	RpcServerOrder  OrderType = 2
-	HttpServerOrder OrderType = 3
-	RpcClientOrder  OrderType = 4
-)
-
 type NodeTypeName string
 
 const (
