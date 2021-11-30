@@ -10,6 +10,7 @@ const ConstRandSend = -2
 const ConstTimeFormat = "2006-01-02 15:04:05"
 const ManageNodeID = 0
 const ManageNodeTypeID = 0
+const GrpcMaxMsgSize = 10*1024*1024
 
 type NodeTypeName string
 

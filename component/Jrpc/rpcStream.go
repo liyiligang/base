@@ -8,40 +8,49 @@ package Jrpc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/gogo/protobuf/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"io"
+	"sync/atomic"
+	"time"
 )
 
 //metadata如果要传输二进制数据，key必须以bin结尾
-const ConstRpcStreamClientMetadata = "rpc-stream-metadata-bin"
-const ConstRpcStreamServerHeader = "rpc-stream-header-bin"
-const ConstRpcStreamServerTrailer = "rpc-stream-trailer-bin"
+const ConstRpcStreamClientHeader = "rpc-stream-client-header-bin"
+const ConstRpcStreamServerHeader = "rpc-stream-server-header-bin"
+const ConstRpcStreamServerTrailer = "rpc-stream-server-trailer-bin"
 
-type RpcStreamFunc interface {
-	RpcStreamConnect(conn *RpcStream) (interface{}, error)
-	RpcStreamConnected(conn *RpcStream) error
-	RpcStreamClose(conn *RpcStream)
-	RpcStreamReceiver(conn *RpcStream, recv interface{})
-	RpcStreamError(text string, err error)
+type RpcStreamConfig struct {
+	RpcStreamConnect  		func(conn *RpcStream) (interface{}, error)
+	RpcStreamConnected  	func(conn *RpcStream) error
+	RpcStreamClosed 		func(conn *RpcStream)
+	RpcStreamReceiver   	func(conn *RpcStream, recv interface{})
+	RpcStreamError 			func(text string, err error)
 }
 
 type RpcStream struct {
 	send         chan interface{}
+	sendCnt		 int64
 	cancel       context.CancelFunc
 	context      context.Context
-	rpcParm      RpcParm
+	rpcContext   RpcContext
 	rpcBindVal   interface{}
-	recvMsgProto interface{}
-	call         RpcStreamFunc
+	recvMsgProto proto.Message
+	call         RpcStreamConfig
 }
 
 // 发送rpc数据
 func (rpc *RpcStream) SendData(data interface{}) {
+	atomic.AddInt64(&rpc.sendCnt, 1)
 	rpc.send <- data
 }
 
-func (rpc *RpcStream) Close() {
+func (rpc *RpcStream) Close(immediately bool) {
+	if !immediately {
+		rpc.sendWait()
+	}
 	if rpc.cancel != nil {
 		rpc.cancel()
 	}
@@ -53,102 +62,110 @@ func (rpc *RpcStream) GetBindVal() interface{} {
 }
 
 // 获取参数值
-func (rpc *RpcStream) GetParm() RpcParm {
-	return rpc.rpcParm
+func (rpc *RpcStream) GetRpcContext() RpcContext {
+	return rpc.rpcContext
 }
 
 // 设置rpc流客户端数据
-func (rpc *RpcStream) SetRpcStreamClientMsg(data []byte) {
-	rpc.rpcParm.RpcStreamClientMsg = data
+func (rpc *RpcStream) WriteRpcStreamClientHeader(data []byte) {
+	rpc.rpcContext.RpcStreamClientHeader = data
 }
 
 // 设置rpc流客户端数据
-func (rpc *RpcStream) SetRpcStreamServerHeader(data []byte) {
-	rpc.rpcParm.RpcStreamServerHeader = data
-}
-
-// 获取Context
-func (rpc *RpcStream) GetContext() context.Context {
-	return rpc.context
+func (rpc *RpcStream) WriteRpcStreamServerHeader(data []byte) {
+	rpc.rpcContext.RpcStreamServerHeader = data
 }
 
 // 初始化rpc流服务
-func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto interface{}, call RpcStreamFunc) (*RpcStream, error) {
-	rpcParm, pErr := GetConnectParm(stream.Context())
-	if pErr != nil {
-		return nil, pErr
+func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto proto.Message, call RpcStreamConfig) (*RpcStream, error) {
+	rpcContext, err := ParseRpcContext(stream.Context())
+	if err != nil {
+		return nil, err
 	}
 	childCtx, cancel := context.WithCancel(stream.Context())
 	conn := RpcStream{
 		send:         make(chan interface{}, 256),
 		cancel:       cancel,
 		context:      childCtx,
-		rpcParm:      rpcParm,
+		rpcContext:   rpcContext,
 		recvMsgProto: recvMsgProto,
 		call:         call,
 	}
-	id, connErr := conn.call.RpcStreamConnect(&conn)
-	if connErr != nil {
-		stream.SetTrailer(SetRpcStreamServerTrailer([]byte(connErr.Error())))
-		return nil, connErr
+	if conn.call.RpcStreamConnect != nil {
+		id, err := conn.call.RpcStreamConnect(&conn)
+		if err != nil {
+			stream.SetTrailer(setRpcStreamServerTrailer([]byte(err.Error())))
+			return nil, err
+		}
+		conn.rpcBindVal = id
 	}
-	conn.rpcBindVal = id
-	stream.SendHeader(SetRpcStreamServerHeader(conn.rpcParm.RpcStreamServerHeader))
+	stream.SendHeader(setRpcStreamServerHeader(conn.rpcContext.RpcStreamServerHeader))
 	return &conn, nil
 }
 
 // 运行rpc流服务
 func (rpc *RpcStream) GrpcStreamServerRun(stream grpc.ServerStream) error {
-	go rpc.readMessage(stream.Context(), stream.RecvMsg)
-	go rpc.writeMessage(stream.Context(), stream.SendMsg)
-	err := rpc.call.RpcStreamConnected(rpc)
-	if err !=nil {
-		stream.SetTrailer(SetRpcStreamServerTrailer([]byte(err.Error())))
-		rpc.Close()
+	go rpc.readMessage(rpc.context, stream.RecvMsg)
+	go rpc.writeMessage(rpc.context, stream.SendMsg)
+
+	var err error
+	if rpc.call.RpcStreamConnected != nil {
+		err = rpc.call.RpcStreamConnected(rpc)
+		if err !=nil {
+			stream.SetTrailer(setRpcStreamServerTrailer([]byte(err.Error())))
+			rpc.Close(true)
+		}
 	}
 	<-rpc.context.Done()
-	rpc.call.RpcStreamClose(rpc)
+	if rpc.call.RpcStreamClosed != nil {
+		rpc.call.RpcStreamClosed(rpc)
+	}
 	return err
 }
 
 //初始化rpc流客户端
-func GrpcStreamClientInit(recvMsgProto interface{}, call RpcStreamFunc) (*RpcStream, error) {
+func GrpcStreamClientInit(recvMsgProto proto.Message, call RpcStreamConfig) (*RpcStream, error) {
 	conn := &RpcStream{
 		send:         make(chan interface{}, 256),
-		rpcParm:      RpcParm{},
+		rpcContext:   RpcContext{},
 		recvMsgProto: recvMsgProto,
 		call:         call,
 	}
-	id, connErr := conn.call.RpcStreamConnect(conn)
-	if connErr !=  nil  {
-		return nil, connErr
+	if conn.call.RpcStreamConnect != nil {
+		id, connErr := conn.call.RpcStreamConnect(conn)
+		if connErr !=  nil  {
+			return nil, connErr
+		}
+		conn.rpcBindVal = id
 	}
-	conn.rpcBindVal = id
-	conn.context, conn.cancel = context.WithCancel(context.Background())
-	conn.context = SetRpcStreamClientMetadata(conn.context, conn.rpcParm.RpcStreamClientMsg)
 	return conn, nil
 }
 
 //运行rpc流客户端
 func (rpc *RpcStream) GrpcStreamClientRun(stream grpc.ClientStream) error {
-	go rpc.readMessage(stream.Context(), stream.RecvMsg)
-	go rpc.writeMessage(stream.Context(), stream.SendMsg)
+	rpc.context, rpc.cancel = context.WithCancel(stream.Context())
+	go rpc.readMessage(rpc.context, stream.RecvMsg)
+	go rpc.writeMessage(rpc.context, stream.SendMsg)
 	go func(){
-		<-stream.Context().Done()
+		<-rpc.context.Done()
 		stream.CloseSend()
-		rpc.rpcParm.RpcStreamServerTrailer = GetRpcStreamServerTrailer(stream.Trailer())
-		rpc.call.RpcStreamClose(rpc)
+		rpc.rpcContext.RpcStreamServerTrailer = getRpcStreamServerTrailer(stream.Trailer())
+		if rpc.call.RpcStreamClosed != nil {
+			rpc.call.RpcStreamClosed(rpc)
+		}
 	}()
 	header, err := stream.Header()
 	if err != nil {
-		rpc.Close()
+		rpc.Close(true)
 		return err
 	}
-	rpc.rpcParm.RpcStreamServerHeader = GetRpcStreamServerHeader(header)
-	err = rpc.call.RpcStreamConnected(rpc)
-	if err != nil {
-		rpc.Close()
-		return err
+	rpc.rpcContext.RpcStreamServerHeader = getRpcStreamServerHeader(header)
+	if rpc.call.RpcStreamConnected != nil {
+		err = rpc.call.RpcStreamConnected(rpc)
+		if err != nil {
+			rpc.Close(true)
+			return err
+		}
 	}
 	return nil
 }
@@ -156,17 +173,17 @@ func (rpc *RpcStream) GrpcStreamClientRun(stream grpc.ClientStream) error {
 func (rpc *RpcStream) readMessage(ctx context.Context, recv func(m interface{}) error) {
 	for {
 		select {
-		case <-ctx.Done(): //rpc流结束
+		case <-ctx.Done():
 			return
 		default:
 			err := recv(rpc.recvMsgProto)
 			if err != nil {
-				if !errors.Is(err, io.EOF){
-					rpc.call.RpcStreamError("rpc readMessage 关闭", err)
-				}
+				rpc.rpcStreamError("rpc read error", err)
 				return
 			}
-			rpc.call.RpcStreamReceiver(rpc, rpc.recvMsgProto)
+			if rpc.call.RpcStreamReceiver != nil {
+				rpc.call.RpcStreamReceiver(rpc, rpc.recvMsgProto)
+			}
 		}
 	}
 }
@@ -174,18 +191,17 @@ func (rpc *RpcStream) readMessage(ctx context.Context, recv func(m interface{}) 
 func (rpc *RpcStream) writeMessage(ctx context.Context, send func(m interface{}) error) {
 	for {
 		select {
-		case <-ctx.Done(): //rpc流结束
+		case <-ctx.Done():
 			return
 		case message, ok := <-rpc.send:
 			if !ok {
-				rpc.call.RpcStreamError("rpc send error", errors.New("send chan is close"))
+				rpc.rpcStreamError("rpc write error", errors.New("chan is closed"))
 				return
 			}
 			err := send(message)
+			atomic.AddInt64(&rpc.sendCnt, -1)
 			if err != nil {
-				if !errors.Is(err, io.EOF){
-					rpc.call.RpcStreamError("rpc send error: ",  err)
-				}
+				rpc.rpcStreamError("rpc write error", err)
 				return
 			}
 		}
@@ -193,13 +209,13 @@ func (rpc *RpcStream) writeMessage(ctx context.Context, send func(m interface{})
 }
 
 //设置Rpc流元数据
-func SetRpcStreamClientMetadata(ctx context.Context, data []byte) context.Context {
-	return metadata.AppendToOutgoingContext(ctx, ConstRpcStreamClientMetadata, string(data))
+func SetRpcStreamClientHeader(data []byte) context.Context {
+	return metadata.AppendToOutgoingContext(context.Background(), ConstRpcStreamClientHeader, string(data))
 }
 
 //获取Rpc流元数据
-func GetRpcStreamMetadata(md metadata.MD) []byte {
-	s := md.Get(ConstRpcStreamClientMetadata)
+func getRpcStreamClientHeader(md metadata.MD) []byte {
+	s := md.Get(ConstRpcStreamClientHeader)
 	if s != nil {
 		return []byte(s[0])
 	}
@@ -207,12 +223,12 @@ func GetRpcStreamMetadata(md metadata.MD) []byte {
 }
 
 //设置Rpc流Header
-func SetRpcStreamServerHeader(data []byte) metadata.MD {
+func setRpcStreamServerHeader(data []byte) metadata.MD {
 	return metadata.Pairs(ConstRpcStreamServerHeader, string(data))
 }
 
 //获取Rpc流Header
-func GetRpcStreamServerHeader(md metadata.MD) []byte {
+func getRpcStreamServerHeader(md metadata.MD) []byte {
 	s := md.Get(ConstRpcStreamServerHeader)
 	if s != nil {
 		return []byte(s[0])
@@ -221,12 +237,12 @@ func GetRpcStreamServerHeader(md metadata.MD) []byte {
 }
 
 //设置Rpc流Trailer
-func SetRpcStreamServerTrailer(data []byte) metadata.MD {
+func setRpcStreamServerTrailer(data []byte) metadata.MD {
 	return metadata.Pairs(ConstRpcStreamServerTrailer, string(data))
 }
 
 //获取Rpc流Trailer
-func GetRpcStreamServerTrailer(md metadata.MD) []byte {
+func getRpcStreamServerTrailer(md metadata.MD) []byte {
 	s := md.Get(ConstRpcStreamServerTrailer)
 	if s != nil {
 		return []byte(s[0])
@@ -234,3 +250,28 @@ func GetRpcStreamServerTrailer(md metadata.MD) []byte {
 	return []byte("")
 }
 
+func (rpc *RpcStream) rpcStreamError(text string, err error) {
+	if errors.Is(err, io.EOF){
+		return
+	}
+	if rpc.call.RpcStreamError != nil {
+		rpc.call.RpcStreamError(text, err)
+	}else {
+		fmt.Println(text, err)
+	}
+}
+
+func (rpc *RpcStream) sendWait() {
+	for {
+		select {
+		case <-rpc.context.Done():
+			return
+		default:
+			if atomic.LoadInt64(&rpc.sendCnt) > 0 {
+				time.Sleep(5 * time.Millisecond)
+			}else{
+				return
+			}
+		}
+	}
+}

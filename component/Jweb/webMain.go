@@ -85,6 +85,11 @@ func accessOrigin(c *gin.Context) {
 	c.Header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, X-Requested-With, Access-Control-Allow-Headers, Content-Type")
 	c.Header("Access-Control-Allow-Credentials", "true")
+
+	if c.Request.Method == "OPTIONS"{
+		c.Writer.WriteHeader(http.StatusOK)
+		return
+	}
 	c.Next()
 }
 

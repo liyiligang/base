@@ -8,6 +8,7 @@ package Jrpc
 import (
 	"context"
 	"errors"
+	"github.com/liyiligang/base/commonConst"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
@@ -18,7 +19,8 @@ import (
 	"time"
 )
 
-const ConstRpcMetadata = "auth-bin"
+//metadata如果要传输二进制数据，key必须以bin结尾
+const ConstRpcHeader = "rpc-header-bin"
 
 type RpcBaseConfig struct {
 	Addr           string
@@ -36,13 +38,13 @@ type RpcServerConfig struct {
 type RpcClientConfig struct {
 	RpcBaseConfig
 	CertName       string
-	Auth           []byte
+	Header           []byte
 	ConnectTimeOut time.Duration
 }
 
-type RpcParm struct {
-	RpcClientMsg       		[]byte
-	RpcStreamClientMsg 		[]byte
+type RpcContext struct {
+	RpcHeader       		[]byte
+	RpcStreamClientHeader	[]byte
 	RpcStreamServerTrailer 	[]byte
 	RpcStreamServerHeader 	[]byte
 	RpcClientAddr      		string
@@ -63,7 +65,8 @@ func GrpcServerInit(config RpcServerConfig) (*grpc.Server, error) {
 		return nil, err
 	}
 
-	s := grpc.NewServer(grpc.Creds(creds))
+	s := grpc.NewServer(grpc.Creds(creds), grpc.MaxSendMsgSize(commonConst.GrpcMaxMsgSize),
+		grpc.MaxRecvMsgSize(commonConst.GrpcMaxMsgSize))
 	config.RegisterCall(s)
 	go func() {
 		if err := s.Serve(lis); err != nil {
@@ -82,50 +85,52 @@ func GrpcClientInit(config RpcClientConfig) (*grpc.ClientConn, error) {
 	if config.ConnectTimeOut != 0 {
 		ctx, _ = context.WithTimeout(ctx, config.ConnectTimeOut)
 	}
-	conn, err := grpc.DialContext(ctx, config.Addr, grpc.WithBlock(), grpc.WithTransportCredentials(creds), grpc.WithPerRPCCredentials(&grpcAuth{auth: config.Auth}))
+
+	conn, err := grpc.DialContext(ctx, config.Addr, grpc.WithBlock(),
+		grpc.WithTransportCredentials(creds), grpc.WithPerRPCCredentials(&rpcHeader{header: config.Header}),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(commonConst.GrpcMaxMsgSize), grpc.MaxCallRecvMsgSize(commonConst.GrpcMaxMsgSize)))
 	if err != nil {
 		return nil, err
 	}
 	return conn, nil
 }
 
-//grpc认证
-type grpcAuth struct {
-	auth []byte
-}
-
 //获取连接参数
-func GetConnectParm(ctx context.Context) (RpcParm, error) {
+func ParseRpcContext(ctx context.Context) (RpcContext, error) {
 	md, ok := metadata.FromIncomingContext(ctx)
 	if !ok {
-		return RpcParm{}, errors.New("参数解析错误")
+		return RpcContext{}, errors.New("参数解析错误")
 	}
-
 	addr, ok := peer.FromContext(ctx)
 	if !ok {
-		return RpcParm{}, errors.New("获取对端IP错误")
+		return RpcContext{}, errors.New("获取对端IP错误")
 	}
-	return RpcParm{RpcClientMsg: GetRpcMetadata(md), RpcStreamClientMsg: GetRpcStreamMetadata(md), RpcClientAddr: addr.Addr.String()}, nil
+	return RpcContext{RpcHeader: getRpcHeader(md), RpcStreamClientHeader: getRpcStreamClientHeader(md), RpcClientAddr: addr.Addr.String()}, nil
 }
 
 //获取元数据
-func GetRpcMetadata(md metadata.MD) []byte {
-	data, ok := md[ConstRpcMetadata]
+func getRpcHeader(md metadata.MD) []byte {
+	data, ok := md[ConstRpcHeader]
 	if ok {
 		return []byte(data[0])
 	}
 	return []byte("")
 }
 
+//grpc认证
+type rpcHeader struct {
+	header []byte
+}
+
 //写入元数据
-func (grpc *grpcAuth) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
+func (grpc *rpcHeader) GetRequestMetadata(context.Context, ...string) (map[string]string, error) {
 	return map[string]string{
-		ConstRpcMetadata: string(grpc.auth),
+		ConstRpcHeader: string(grpc.header),
 	}, nil
 }
 
 //允许元数据传输
-func (grpc *grpcAuth) RequireTransportSecurity() bool {
+func (grpc *rpcHeader) RequireTransportSecurity() bool {
 	return true
 }
 
