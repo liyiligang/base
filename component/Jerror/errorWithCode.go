@@ -14,31 +14,35 @@
  * limitations under the License.
  */
 
-
-package Jtool
+package Jerror
 
 import (
-	"errors"
-	"io"
+	"github.com/liyiligang/base/component/Jtool"
 )
 
-func ReadIOWithSize(reader io.Reader, size uint64, call func ([]byte) error) error {
-	if reader == nil || size == 0 || call == nil {
-		return errors.New("parameter is error")
+// ErrWithCode 带错误码的错误类型
+type ErrWithCode struct {
+	Code  		int
+	Err   		error
+}
+
+func (err *ErrWithCode) Error() string {
+	return err.Err.Error() + " with error code " + Jtool.IntToString(err.Code)
+}
+
+func NewErrWithCode(code int, err error) *ErrWithCode {
+	return &ErrWithCode{
+		Code:  code,
+		Err:   err,
 	}
-	buf := make([]byte, size)
-	for {
-		n, err := reader.Read(buf)
-		if err != nil {
-			if errors.Is(err, io.EOF){
-				break
-			}
-			return err
-		}
-		err = call(buf[:n])
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+}
+
+func IsErrWithCode(err error) bool {
+	_ ,ok := err.(*ErrWithCode)
+	return ok
+}
+
+func AssertErrWithCode(err error) *ErrWithCode {
+	errWithCode , _ := err.(*ErrWithCode)
+	return errWithCode
 }

@@ -1,26 +1,38 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/1 17:41
-// Description: rpc主服务
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jrpc
 
 import (
 	"context"
 	"errors"
-	"github.com/liyiligang/base/commonConst"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/grpclog"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"io"
+	"log"
 	"net"
 	"time"
 )
 
 //metadata如果要传输二进制数据，key必须以bin结尾
 const ConstRpcHeader = "rpc-header-bin"
+
 
 type RpcBaseConfig struct {
 	Addr           string
@@ -29,17 +41,18 @@ type RpcBaseConfig struct {
 
 type RpcServerConfig struct {
 	RpcBaseConfig
-	PrivateKeyPath string
-	RegisterCall   func(*grpc.Server)
-	LogWrite 	   io.Writer
-	ErrorCall      func(str string, keysAndValues ...interface{})
+	PrivateKeyPath 		string
+	RegisterCall   		func(*grpc.Server)
+	LogWrite 	   		io.Writer
+	ServerOption 		[]grpc.ServerOption
 }
 
 type RpcClientConfig struct {
 	RpcBaseConfig
-	CertName       string
+	CertName       	 string
 	Header           []byte
-	ConnectTimeOut time.Duration
+	ConnectTimeOut 	 time.Duration
+	ClientOption 	 []grpc.DialOption
 }
 
 type RpcContext struct {
@@ -65,12 +78,12 @@ func GrpcServerInit(config RpcServerConfig) (*grpc.Server, error) {
 		return nil, err
 	}
 
-	s := grpc.NewServer(grpc.Creds(creds), grpc.MaxSendMsgSize(commonConst.GrpcMaxMsgSize),
-		grpc.MaxRecvMsgSize(commonConst.GrpcMaxMsgSize))
+	config.ServerOption = append(config.ServerOption, grpc.Creds(creds))
+	s := grpc.NewServer(config.ServerOption...)
 	config.RegisterCall(s)
 	go func() {
 		if err := s.Serve(lis); err != nil {
-			config.ErrorCall("Rpc服务初始化失败", "err", err)
+			log.Panic("rpc server startup failed: ", err)
 		}
 	}()
 	return s, nil
@@ -85,10 +98,9 @@ func GrpcClientInit(config RpcClientConfig) (*grpc.ClientConn, error) {
 	if config.ConnectTimeOut != 0 {
 		ctx, _ = context.WithTimeout(ctx, config.ConnectTimeOut)
 	}
-
-	conn, err := grpc.DialContext(ctx, config.Addr, grpc.WithBlock(),
-		grpc.WithTransportCredentials(creds), grpc.WithPerRPCCredentials(&rpcHeader{header: config.Header}),
-		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(commonConst.GrpcMaxMsgSize), grpc.MaxCallRecvMsgSize(commonConst.GrpcMaxMsgSize)))
+	config.ClientOption = append(config.ClientOption, grpc.WithTransportCredentials(creds),
+		grpc.WithPerRPCCredentials(&rpcHeader{header: config.Header}))
+	conn, err := grpc.DialContext(ctx, config.Addr, config.ClientOption...)
 	if err != nil {
 		return nil, err
 	}

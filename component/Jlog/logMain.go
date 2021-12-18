@@ -1,12 +1,29 @@
-// Copyright 2017 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/1 17:10
-// Description: 日志主服务
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jlog
 
+import (
+	"go.uber.org/zap"
+	"gopkg.in/natefinch/lumberjack.v2"
+	"io"
+)
 
-// 日志服务初始化配置
+var globalSugared *zap.SugaredLogger
+
 type LogInitConfig struct {
 	Debug         bool
 	LocalPath     string
@@ -16,44 +33,84 @@ type LogInitConfig struct {
 	InitialFields map[string]interface{}
 }
 
-// 初始化日志服务
-func LogInit(config LogInitConfig) error {
-	//流程日志
-	return initProcessLog(config)
+type logIOWrite struct {
+	msg 	string
+	key 	string
+	logger 	*zap.SugaredLogger
 }
 
-//Debug 输出Debug级别日志
+func (w *logIOWrite) Write(p []byte) (n int, err error){
+	w.logger.Infow(w.msg, w.key, string(p))
+	return
+}
+
+func InitGlobalLog(config LogInitConfig) {
+	globalSugared = InitLog(config)
+}
+
+func InitLog(config LogInitConfig) *zap.SugaredLogger {
+
+	//配置编码格式
+	encoder := fileEncoderConfig()
+
+	//配置输出文件
+	ioWriter := &lumberjack.Logger{
+		Filename:   config.LocalPath,  // 日志文件路径
+		MaxSize:    config.MaxSize,    // 每个日志文件保存的最大尺寸 单位：M
+		MaxBackups: config.MaxBackups, // 最多保存多少个日志文件
+		MaxAge:     config.MaxAge,     // 日志文件最多保存多少天
+		Compress:   false,             // 是否压缩
+		LocalTime:  true,              // 是否使用本地时间
+	}
+
+	//其他日志配置
+	outConfig := fileOutputConfig()
+	if config.Debug {
+		outConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+		outConfig.Development = true
+	}
+	outConfig.InitialFields = config.InitialFields
+
+	//初始化服务核心
+	return initLogCore(coreConfig{
+		output:    ioWriter,
+		encoder:   encoder,
+		outConfig: outConfig,
+	})
+}
+
 func Debug(str string, keysAndValues ...interface{}) {
-	processSugared.Debugw(str, keysAndValues...)
+	globalSugared.Debugw(str, keysAndValues...)
 }
 
-//Info 输出Info级别日志
 func Info(str string, keysAndValues ...interface{}) {
-	processSugared.Infow(str, keysAndValues...)
+	globalSugared.Infow(str, keysAndValues...)
 }
 
-//Warn 输出Warn级别日志
 func Warn(str string, keysAndValues ...interface{}) {
-	processSugared.Warnw(str, keysAndValues...)
+	globalSugared.Warnw(str, keysAndValues...)
 }
 
-//Error 输出Error级别日志
 func Error(str string, keysAndValues ...interface{}) {
-	processSugared.Errorw(str, keysAndValues...)
+	globalSugared.Errorw(str, keysAndValues...)
 }
 
-//DPanic 输出DPanic级别日志
 func DPanic(str string, keysAndValues ...interface{}) {
-	processSugared.DPanicw(str, keysAndValues...)
+	globalSugared.DPanicw(str, keysAndValues...)
 }
 
-//Panic 输出Panic级别日志
 func Panic(str string, keysAndValues ...interface{}) {
-	processSugared.Panicw(str, keysAndValues...)
+	globalSugared.Panicw(str, keysAndValues...)
 }
 
-//Fatal 输出Fatal级别日志
 func Fatal(str string, keysAndValues ...interface{}) {
-	processSugared.Fatalw(str, keysAndValues...)
+	globalSugared.Fatalw(str, keysAndValues...)
 }
 
+func IOWrite (key string, logger *zap.SugaredLogger) io.Writer {
+	if logger == nil {
+		logger = globalSugared
+	}
+	ioWrite := &logIOWrite{msg: "", key: key, logger: logger}
+	return ioWrite
+}

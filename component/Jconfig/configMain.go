@@ -1,17 +1,27 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2020/1/21 15:24
-// Description:
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jconfig
 
 import (
 	"bytes"
 	"github.com/spf13/viper"
-	"log"
 )
 
-func ReadConfigFromPath(config interface{}, path string) {
+func ReadConfigFromPath(config interface{}, path string) error {
 	viperPath := viper.New()
 	viperPath.SetConfigName("config")
 	viperPath.SetConfigType("toml")
@@ -20,26 +30,19 @@ func ReadConfigFromPath(config interface{}, path string) {
 	}
 	viperPath.AddConfigPath(path)
 	if err := viperPath.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			log.Fatal("找不到本地配置文件: " + path + "/config.toml")
-		} else {
-			log.Fatal("读取本地配置文件错误", "err: ", err)
-		}
+		return err
 	}
-
 	if err := viperPath.Unmarshal(config); err != nil {
-		log.Fatal("本地配置文件解析失败", "err: ", err)
+		return err
 	}
-	log.Println("本地配置文件读取成功")
+	return nil
 }
 
 func ReadConfigFromByte(config interface{}, data []byte) error {
 	viperByte := viper.New()
 	viperByte.SetConfigType("toml")
 	if err := viperByte.ReadConfig(bytes.NewBuffer(data)); err != nil {
-		if err != nil {
-			return err
-		}
+		return err
 	}
 	if err := viperByte.Unmarshal(config); err != nil {
 		return err

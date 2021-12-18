@@ -1,3 +1,19 @@
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package Jdiscovery
 
 import (
@@ -16,10 +32,10 @@ type DiscoveryConfig struct {
 
 func (discovery *Discovery) RegisterConfigWatch(config *DiscoveryConfig) error {
 	if config.ConfigKey == "" {
-		return errors.New("配置名不能为空")
+		return errors.New("config key is empty")
 	}
 	if config.ConfigCall == nil {
-		return errors.New("配置回调函数不能为空")
+		return errors.New("config call is nil")
 	}
 	config.configCtx, config.configCancel = context.WithCancel(context.Background())
 	data, err := discovery.GetConfig(config.ConfigKey)
@@ -33,11 +49,11 @@ func (discovery *Discovery) RegisterConfigWatch(config *DiscoveryConfig) error {
 }
 
 func (discovery *Discovery) UnRegisterConfigWatch(configKey string) error {
-	config, ok := discovery.DiscoveryWatchConfigMap[configKey]
+	watch, ok := discovery.DiscoveryWatchConfigMap[configKey]
 	if !ok {
-		return errors.New("找不到" + configKey + "对应配置")
+		return errors.New("watch config " + configKey + " is not found")
 	}
-	config.configCancel()
+	watch.configCancel()
 	delete(discovery.DiscoveryWatchConfigMap, configKey)
 	return nil
 }

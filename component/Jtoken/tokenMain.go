@@ -1,7 +1,18 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/15 18:19
-// Description: 令牌主服务
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+*/
 
 package Jtoken
 
@@ -16,17 +27,11 @@ import (
 var key string
 
 type TokenConfig struct {
-	Key           string
-	UserID        int64
-	StartDuration time.Duration
-	StopDuration  time.Duration
-	UserPara      *map[string]interface{}
-}
-
-type TokenAns struct {
-	Token    string
-	UserID   int64
-	UserPara map[string]interface{}
+	Key           	string
+	ID        	  	int64
+	StartDuration 	time.Duration
+	StopDuration  	time.Duration
+	Custom      	map[string]interface{}
 }
 
 func GetSecretByPath(keyPath string) (string, error) {
@@ -52,7 +57,7 @@ func GetToken(config TokenConfig) string {
 	//jti: 唯一身份标识
 
 	Claims := jwt.MapClaims{
-		"jti":           config.UserID,
+		"jti":           config.ID,
 		"nbf":           time.Now().Add(config.StartDuration).Unix(),
 		"exp":           time.Now().Add(config.StartDuration+config.StopDuration).Unix(),
 		"iat":           time.Now().Unix(),
@@ -60,8 +65,8 @@ func GetToken(config TokenConfig) string {
 		"stopDuration":  config.StopDuration,
 	}
 
-	if config.UserPara != nil {
-		for k, v := range *config.UserPara {
+	if config.Custom != nil {
+		for k, v := range config.Custom {
 			Claims[k] = v
 		}
 	}
@@ -71,7 +76,7 @@ func GetToken(config TokenConfig) string {
 	return tokenString
 }
 
-func ParseToken(tokenString string, key string) (int64, error) {
+func ParseToken(tokenString string, key string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("%v", token.Header["alg"])
@@ -79,12 +84,15 @@ func ParseToken(tokenString string, key string) (int64, error) {
 		return []byte(key), nil
 	})
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return 0, errors.New("token解析失败")
+	if !ok {
+		return nil, errors.New("token.Claims assert fail with jwt.MapClaims")
 	}
-	return int64(claims["jti"].(float64)), nil
+	if !token.Valid {
+		return nil, errors.New("token "+ tokenString + " is invalid")
+	}
+	return claims, nil
 }
 

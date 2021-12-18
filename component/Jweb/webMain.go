@@ -1,17 +1,29 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/1 17:41
-// Description: web主服务
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jweb
 
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/liyiligang/base/component/Jtool"
 	"github.com/unrolled/secure"
 	"io"
+	"log"
 	"net/http"
-	"strings"
 )
 
 
@@ -25,7 +37,6 @@ type WebInitConfig struct {
 	RedirectAddr		string					//将此地址以http重定向至https
 	LogWrite 			io.Writer
 	RouteCall       	func(r *gin.Engine)
-	ErrorCall      		func(str string, keysAndValues ...interface{})
 }
 
 // web服务初始化
@@ -42,9 +53,8 @@ func WebInit(config WebInitConfig) *http.Server {
 	r := gin.Default()
 	r.Use(accessOrigin)
 
-	//重定向需要放在RouteFunc前
 	if config.IsHttps && config.RedirectAddr != "" {
-		r.Use(redirectHttp(getPortFromAddr(config.Addr)))
+		r.Use(redirectHttp(Jtool.GetPortFromAddr(config.Addr)))
 	}
 
 	if config.RouteCall != nil {
@@ -60,21 +70,21 @@ func WebInit(config WebInitConfig) *http.Server {
 		if config.IsHttps {
 			if config.IsHttps && config.RedirectAddr != "" {
 				go func() {
-					config.httpError(http.ListenAndServe(config.RedirectAddr, r))
+					config.initError(http.ListenAndServe(config.RedirectAddr, r))
 				}()
 			}
-			config.httpError(srv.ListenAndServeTLS(config.PublicKeyPath, config.PrivateKeyPath))
+			config.initError(srv.ListenAndServeTLS(config.PublicKeyPath, config.PrivateKeyPath))
 		} else {
-			config.httpError(srv.ListenAndServe())
+			config.initError(srv.ListenAndServe())
 		}
 	}()
 	return srv
 }
 
 //错误处理
-func (config *WebInitConfig) httpError(err error) {
+func (config *WebInitConfig) initError(err error) {
 	if err != nil && err != http.ErrServerClosed {
-		config.ErrorCall("Web服务初始化失败", "err", err)
+		log.Panic("web server startup failed: ", err)
 	}
 }
 
@@ -87,6 +97,7 @@ func accessOrigin(c *gin.Context) {
 	c.Header("Access-Control-Allow-Credentials", "true")
 
 	if c.Request.Method == "OPTIONS"{
+		c.Abort()
 		c.Writer.WriteHeader(http.StatusOK)
 		return
 	}
@@ -98,7 +109,7 @@ func redirectHttp(port string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		middleware := secure.New(secure.Options{
 			SSLRedirect: true,
-			SSLHost:     getIPFromAddr(c.Request.Host) + ":" + port,
+			SSLHost:     Jtool.GetIPFromAddr(c.Request.Host) + ":" + port,
 		})
 		err := middleware.Process(c.Writer, c.Request)
 		if err != nil {
@@ -111,22 +122,4 @@ func redirectHttp(port string) gin.HandlerFunc {
 	}
 }
 
-//从地址获取IP
-func getIPFromAddr(addr string) string {
-	ip := addr
-	comma := strings.LastIndex(addr, ":")
-	if comma >= 0 {
-		ip = string([]rune(addr)[:comma])
-	}
-	return ip
-}
 
-//从地址获取端口
-func getPortFromAddr(addr string) string {
-	port := ""
-	comma := strings.LastIndex(addr, ":")
-	if comma >= 0 {
-		port = string([]rune(addr)[(comma + 1):])
-	}
-	return port
-}

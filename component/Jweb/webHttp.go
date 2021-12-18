@@ -7,8 +7,6 @@ import (
 
 type HttpFunc interface {
 	HttpReceiver([]byte) ([]byte, error, int)
-	HttpUploadFile(c *gin.Context) ([]byte, error)
-	HttpDownloadFile(c *gin.Context) (string, error)
 }
 
 type HttpConfig struct {
@@ -33,20 +31,4 @@ func (config *HttpConfig) HttpHandle(c *gin.Context) {
 	c.String(http.StatusOK, string(ans))
 }
 
-func (config *HttpConfig) HttpUploadFile(c *gin.Context) {
-	ans, err := config.Call.HttpUploadFile(c)
-	if err != nil {
-		c.String(http.StatusBadRequest, err.Error())
-		return
-	}
-	c.String(http.StatusOK, string(ans))
-}
 
-func (config *HttpConfig) HttpDownloadFile(c *gin.Context) {
-	ans, err := config.Call.HttpDownloadFile(c)
-	if err != nil {
-		c.String(http.StatusBadRequest, err.Error())
-		return
-	}
-	c.File(ans)
-}

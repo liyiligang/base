@@ -1,14 +1,24 @@
-// Copyright 2021 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2021/06/28 11:11
-// Description:
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jrpc
 
 import (
 	"context"
 	"errors"
-	"github.com/liyiligang/base/commonConst"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"time"
@@ -20,7 +30,7 @@ type RpcKeepaliveCall interface {
 }
 
 type RpcKeepalive struct {
-	ServerNode      	 *commonConst.CommonNodeData
+	Data 				 interface{}
 	Conn                 *grpc.ClientConn
 	KeepaliveTime 	     time.Duration
 	call 			     RpcKeepaliveCall
@@ -30,9 +40,6 @@ type RpcKeepalive struct {
 func RegisterRpcKeepalive(rpcKeepalive *RpcKeepalive, call RpcKeepaliveCall) error {
 	if rpcKeepalive == nil {
 		return errors.New("rpcKeepalive must not be nil")
-	}
-	if rpcKeepalive.ServerNode == nil {
-		return errors.New("rpcKeepalive.ServerNode must not be nil")
 	}
 	if rpcKeepalive.Conn == nil {
 		return errors.New("rpcKeepalive.Conn must not be nil")

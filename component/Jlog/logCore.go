@@ -1,7 +1,18 @@
-// Copyright 2017 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/1 17:10
-// Description: 日志服务核心
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jlog
 
@@ -14,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -27,7 +37,7 @@ type coreConfig struct {
 }
 
 //创建日志核心服务
-func initLogCore(config coreConfig) (*zap.SugaredLogger, error) {
+func initLogCore(config coreConfig) *zap.SugaredLogger {
 	//初始化日志服务
 	var cores []zapcore.Core
 
@@ -59,12 +69,8 @@ func initLogCore(config coreConfig) (*zap.SugaredLogger, error) {
 	core := zapcore.NewTee(cores...)
 	logger := zap.New(core, buildOptions(config.outConfig)...)
 
-	var err error = nil
-	if logger == nil {
-		err = errors.New("Init Jlog core errorBox")
-	}
 	//创建日志服务接口指针
-	return logger.Sugar(), err
+	return logger.Sugar()
 }
 
 //设置日志服务参数
@@ -95,7 +101,7 @@ func buildOptions(logConfig zap.Config) []zap.Option {
 	//日志丢弃模式
 	if logConfig.Sampling != nil {
 		opts = append(opts, zap.WrapCore(func(core zapcore.Core) zapcore.Core {
-			return zapcore.NewSampler(core, time.Second, logConfig.Sampling.Initial, logConfig.Sampling.Thereafter)
+			return zapcore.NewSamplerWithOptions(core, time.Second, logConfig.Sampling.Initial, logConfig.Sampling.Thereafter)
 		}))
 	}
 
@@ -156,7 +162,7 @@ func fileCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEnc
 
 	var callerStr string
 	if !caller.Defined {
-		callerStr = "caller is errorBox"
+		callerStr = "caller is not defined"
 	}
 
 	fileN := strings.Split(caller.File, "/")

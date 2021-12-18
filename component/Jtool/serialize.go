@@ -1,7 +1,18 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/10/30 7:38
-// Description: 序列化工具包
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jtool
 
@@ -27,6 +38,11 @@ func BytesToStruct(b *[]byte) unsafe.Pointer {
 	return unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(b)).Data)
 }
 
+//int to string
+func IntToString(i int) string {
+	return strconv.FormatInt(int64(i), 10)
+}
+
 //int64 to string
 func Int64ToString(i int64) string {
 	return strconv.FormatInt(i, 10)
@@ -35,6 +51,12 @@ func Int64ToString(i int64) string {
 //uint64 to string
 func Uint64ToString(i uint64) string {
 	return strconv.FormatInt(int64(i), 10)
+}
+
+//string to int64
+func StringToInt64(s string) int64 {
+	i, _ := strconv.ParseInt(s, 10, 64)
+	return i
 }
 
 //[]int to string

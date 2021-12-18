@@ -1,7 +1,18 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/2 10:10
-// Description: rpc客户端
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jrpc
 
@@ -22,7 +33,7 @@ const ConstRpcStreamClientHeader = "rpc-stream-client-header-bin"
 const ConstRpcStreamServerHeader = "rpc-stream-server-header-bin"
 const ConstRpcStreamServerTrailer = "rpc-stream-server-trailer-bin"
 
-type RpcStreamConfig struct {
+type RpcStreamCall struct {
 	RpcStreamConnect  		func(conn *RpcStream) (interface{}, error)
 	RpcStreamConnected  	func(conn *RpcStream) error
 	RpcStreamClosed 		func(conn *RpcStream)
@@ -38,7 +49,7 @@ type RpcStream struct {
 	rpcContext   RpcContext
 	rpcBindVal   interface{}
 	recvMsgProto proto.Message
-	call         RpcStreamConfig
+	call         RpcStreamCall
 }
 
 // 发送rpc数据
@@ -77,15 +88,15 @@ func (rpc *RpcStream) WriteRpcStreamServerHeader(data []byte) {
 }
 
 // 初始化rpc流服务
-func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto proto.Message, call RpcStreamConfig) (*RpcStream, error) {
+func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto proto.Message, call RpcStreamCall) (*RpcStream, error) {
 	rpcContext, err := ParseRpcContext(stream.Context())
 	if err != nil {
 		return nil, err
 	}
-	childCtx, cancel := context.WithCancel(stream.Context())
+	childCtx, childCancel := context.WithCancel(stream.Context())
 	conn := RpcStream{
 		send:         make(chan interface{}, 256),
-		cancel:       cancel,
+		cancel:       childCancel,
 		context:      childCtx,
 		rpcContext:   rpcContext,
 		recvMsgProto: recvMsgProto,
@@ -99,7 +110,10 @@ func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto proto.Message, 
 		}
 		conn.rpcBindVal = id
 	}
-	stream.SendHeader(setRpcStreamServerHeader(conn.rpcContext.RpcStreamServerHeader))
+	err = stream.SendHeader(setRpcStreamServerHeader(conn.rpcContext.RpcStreamServerHeader))
+	if err != nil {
+		return nil, err
+	}
 	return &conn, nil
 }
 
@@ -124,7 +138,7 @@ func (rpc *RpcStream) GrpcStreamServerRun(stream grpc.ServerStream) error {
 }
 
 //初始化rpc流客户端
-func GrpcStreamClientInit(recvMsgProto proto.Message, call RpcStreamConfig) (*RpcStream, error) {
+func GrpcStreamClientInit(recvMsgProto proto.Message, call RpcStreamCall) (*RpcStream, error) {
 	conn := &RpcStream{
 		send:         make(chan interface{}, 256),
 		rpcContext:   RpcContext{},
@@ -148,7 +162,10 @@ func (rpc *RpcStream) GrpcStreamClientRun(stream grpc.ClientStream) error {
 	go rpc.writeMessage(rpc.context, stream.SendMsg)
 	go func(){
 		<-rpc.context.Done()
-		stream.CloseSend()
+		err := stream.CloseSend()
+		if err != nil {
+			rpc.rpcStreamError("rpc close send error", err)
+		}
 		rpc.rpcContext.RpcStreamServerTrailer = getRpcStreamServerTrailer(stream.Trailer())
 		if rpc.call.RpcStreamClosed != nil {
 			rpc.call.RpcStreamClosed(rpc)
@@ -257,7 +274,7 @@ func (rpc *RpcStream) rpcStreamError(text string, err error) {
 	if rpc.call.RpcStreamError != nil {
 		rpc.call.RpcStreamError(text, err)
 	}else {
-		fmt.Println(text, err)
+		fmt.Println(text + ": ", err)
 	}
 }
 

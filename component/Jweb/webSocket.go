@@ -1,12 +1,25 @@
-// Copyright 2019 The Authors. All rights reserved.
-// Author: liyiligang
-// Date: 2019/4/1 17:41
-// Description: webSocket服务
+/*
+ * Copyright 2021 liyiligang.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package Jweb
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"net/http"
@@ -16,13 +29,13 @@ import (
 const WebsocketCloseByServer = 4000
 
 // Websocket接口配置
-type WebsocketFunc interface {
-	WebsocketConnect(conn *WebsocketConn) (interface{}, error)
-	WebsocketConnected(conn *WebsocketConn) error
-	WebsocketClose(conn *WebsocketConn, code int, text string)
-	WebsocketReceiver(conn *WebsocketConn, data *[]byte)
-	WebsocketPong(conn *WebsocketConn, pingData string) string
-	WebsocketError(text string, err error)
+type WebsocketCall struct {
+	WebsocketConnect		func(conn *WebsocketConn) (interface{}, error)
+	WebsocketConnected		func(conn *WebsocketConn) error
+	WebsocketClosed			func(conn *WebsocketConn, code int, text string)
+	WebsocketReceiver		func(conn *WebsocketConn, data *[]byte)
+	WebsocketPong			func(conn *WebsocketConn, pingData string) string
+	WebsocketError			func(text string, err error)
 }
 
 // Websocket配置参数
@@ -31,7 +44,7 @@ type WebsocketConfig struct {
 	ReadWaitTime  time.Duration
 	PingWaitTime  time.Duration
 	PongWaitTime  time.Duration
-	Call          WebsocketFunc
+	Call          WebsocketCall
 }
 
 type WebsocketParm struct {
@@ -44,8 +57,8 @@ type WebsocketConn struct {
 	conn        *websocket.Conn
 	send        chan []byte
 	sendPre     chan *websocket.PreparedMessage
-	sendCtx     context.Context
-	sendClose   context.CancelFunc
+	context     context.Context
+	cancel   	context.CancelFunc
 	config      WebsocketConfig
 	wsParm      WebsocketParm
 	connBindVal interface{}
@@ -70,58 +83,67 @@ func (config *WebsocketConfig) WsHandle(c *gin.Context) {
 
 // 握手
 func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, clientIP string) {
-	c, err := upgrader.Upgrade(ginContext.Writer, ginContext.Request, nil)
-	if err != nil {
-		config.Call.WebsocketError("WebSocket握手失败", err)
-		return
-	}
-
-	ctx, cancal := context.WithCancel(context.Background())
-
+	ctx, ctxCancel := context.WithCancel(context.Background())
 	conn := WebsocketConn{
-		conn:      c,
 		send:      make(chan []byte, 256),
 		sendPre:   make(chan *websocket.PreparedMessage, 10),
 		config:    config,
-		sendCtx:   ctx,
-		sendClose: cancal,
+		context:   ctx,
+		cancel:    ctxCancel,
+	}
+
+	var err error
+	conn.conn, err = upgrader.Upgrade(ginContext.Writer, ginContext.Request, nil)
+	if err != nil {
+		conn.closeWs("websocket init error", err)
+		return
 	}
 
 	conn.wsParm.WsClientMsg = login
 	conn.wsParm.WsClientAddr = clientIP
-	conn.conn.SetCloseHandler(conn.closeHandler)
 	conn.conn.SetPingHandler(conn.pingHandler)
 	conn.conn.SetPongHandler(conn.pongHandler)
 
-	id, err := conn.config.Call.WebsocketConnect(&conn)
-	if err != nil {
-		conn.closeConn(err.Error())
-		return
+	if conn.config.Call.WebsocketConnect != nil {
+		id, err := conn.config.Call.WebsocketConnect(&conn)
+		if err != nil {
+			conn.closeWs("websocket init error", err)
+			return
+		}
+		conn.connBindVal = id
 	}
 
 	go conn.readMessage()
 	go conn.writeMessage()
-	conn.connBindVal = id
-	err = conn.config.Call.WebsocketConnected(&conn)
-	if err != nil {
-		conn.closeConn(err.Error())
-		return
+
+	if conn.config.Call.WebsocketConnected != nil {
+		err = conn.config.Call.WebsocketConnected(&conn)
+		if err != nil {
+			conn.closeWs("websocket init error", err)
+			return
+		}
 	}
 }
 
 // 连接关闭回调
 func (ws *WebsocketConn) closeHandler(code int, text string) error {
-	ws.sendClose()
-	ws.config.Call.WebsocketClose(ws, code, text)
+	ws.cancel()
+	if ws.config.Call.WebsocketClosed != nil {
+		ws.config.Call.WebsocketClosed(ws, code, text)
+	}
 	return nil
 }
 
 // ping回调
 func (ws *WebsocketConn) pingHandler(pingData string) error {
-	data := ws.config.Call.WebsocketPong(ws, pingData)
-	ws.conn.WriteControl(websocket.PongMessage, []byte(data), ws.GetDeadline(ws.config.PongWaitTime))
-	ws.conn.SetReadDeadline(ws.GetDeadline(ws.config.PingWaitTime))
-	return nil
+	if ws.config.Call.WebsocketPong != nil {
+		data := ws.config.Call.WebsocketPong(ws, pingData)
+		err := ws.conn.WriteControl(websocket.PongMessage, []byte(data), ws.GetDeadline(ws.config.PongWaitTime))
+		if err != nil {
+			return err
+		}
+	}
+	return ws.conn.SetReadDeadline(ws.GetDeadline(ws.config.PingWaitTime))
 }
 
 // pong回调
@@ -129,19 +151,26 @@ func (ws *WebsocketConn) pongHandler(pongData string) error {
 	return nil
 }
 
-// 主动关闭连接
-func (ws *WebsocketConn) Close(msg string) error {
-	ws.closeHandler(WebsocketCloseByServer, msg)
-	return ws.closeConn(msg)
+// 关闭连接
+func (ws *WebsocketConn) closeWs(text string, err error) {
+	ws.webSocketError(text, err)
+	if ws.conn != nil {
+		err := ws.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(WebsocketCloseByServer, err.Error()), ws.GetDeadline(ws.config.WriteWaitTime))
+		if err != nil {
+			ws.webSocketError("websocket close error", err)
+		}
+		err = ws.conn.Close()
+		if err != nil {
+			ws.webSocketError("websocket close error", err)
+		}
+	}
+	_ = ws.closeHandler(WebsocketCloseByServer, err.Error())
+	return
 }
 
-// 关闭连接
-func (ws *WebsocketConn) closeConn(errMsg string) error {
-	err := ws.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(WebsocketCloseByServer, errMsg), ws.GetDeadline(ws.config.WriteWaitTime))
-	if err != nil {
-		ws.config.Call.WebsocketError("WebSocket关闭失败: ", err)
-	}
-	return ws.conn.Close()
+// 主动关闭连接
+func (ws *WebsocketConn) Close(msg string) {
+	ws.closeWs("websocket is active close ", errors.New(msg))
 }
 
 // 发送Byte数据
@@ -151,8 +180,8 @@ func (ws *WebsocketConn) SendByte(data *[]byte) {
 
 // 发送String数据
 func (ws *WebsocketConn) SendString(data string) {
-	byte := []byte(data)
-	ws.SendByte(&byte)
+	bytes := []byte(data)
+	ws.SendByte(&bytes)
 }
 
 // 发送预处理数据
@@ -180,18 +209,25 @@ func (ws *WebsocketConn) GetDeadline(t time.Duration) time.Time {
 
 // 读Websocket消息
 func (ws *WebsocketConn) readMessage() {
-	//ws.conn.SetReadLimit(maxMessageSize)		//最大读取限制
 	for {
-		ws.conn.SetReadDeadline(ws.GetDeadline(ws.config.ReadWaitTime))
-		_, message, err := ws.conn.ReadMessage()
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway){
-				ws.config.Call.WebsocketError("WebSocket读取错误", err)
-				ws.Close(err.Error())
-			}
+		select {
+		case <-ws.context.Done():
 			return
+		default:
+			err := ws.conn.SetReadDeadline(ws.GetDeadline(ws.config.ReadWaitTime))
+			if err != nil {
+				ws.closeWs("websocket read error", err)
+				return
+			}
+			_, message, err := ws.conn.ReadMessage()
+			if err != nil {
+				ws.closeWs("websocket read error", err)
+				return
+			}
+			if ws.config.Call.WebsocketReceiver != nil {
+				ws.config.Call.WebsocketReceiver(ws, &message)
+			}
 		}
-		ws.config.Call.WebsocketReceiver(ws, &message)
 	}
 }
 
@@ -199,28 +235,38 @@ func (ws *WebsocketConn) readMessage() {
 func (ws *WebsocketConn) writeMessage() {
 	for {
 		select {
+		case <-ws.context.Done():
+			return
 		case message, ok := <-ws.send:
 			if !ok {
-				ws.config.Call.WebsocketError("WebSocket读取send chan失败", nil)
-				continue
+				ws.closeWs("webSocket send error", errors.New("send channal is closed"))
+				return
 			}
-			ws.conn.SetWriteDeadline(ws.GetDeadline(ws.config.WriteWaitTime))
-			err := ws.conn.WriteMessage(websocket.BinaryMessage, message)
+			err := ws.conn.SetWriteDeadline(ws.GetDeadline(ws.config.WriteWaitTime))
 			if err != nil {
-				ws.config.Call.WebsocketError("WebSocket发送失败", err)
+				ws.closeWs("webSocket send error", err)
+				return
+			}
+			err = ws.conn.WriteMessage(websocket.BinaryMessage, message)
+			if err != nil {
+				ws.closeWs("webSocket send error", err)
+				return
 			}
 		case preMessage, ok := <-ws.sendPre:
 			if !ok {
-				ws.config.Call.WebsocketError("WebSocket广播读取send chan失败", nil)
-				continue
+				ws.closeWs("webSocket pre-send error", errors.New("send channal is closed"))
+				return
 			}
-			ws.conn.SetWriteDeadline(ws.GetDeadline(ws.config.WriteWaitTime))
-			err := ws.conn.WritePreparedMessage(preMessage)
+			err := ws.conn.SetWriteDeadline(ws.GetDeadline(ws.config.WriteWaitTime))
 			if err != nil {
-				ws.config.Call.WebsocketError("WebSocket_Prepared发送失败", err)
+				ws.closeWs("webSocket pre-send error", err)
+				return
 			}
-		case <-ws.sendCtx.Done():
-			return
+			err = ws.conn.WritePreparedMessage(preMessage)
+			if err != nil {
+				ws.closeWs("webSocket pre-send error", err)
+				return
+			}
 		}
 	}
 }
@@ -245,4 +291,18 @@ func BroadCastString(data string, connList []*WebsocketConn) error {
 		}
 	}
 	return err
+}
+
+func (ws *WebsocketConn) webSocketError(text string, err error) {
+	if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+		return
+	}
+	if websocket.IsCloseError(err, websocket.CloseGoingAway) {
+		return
+	}
+	if ws.config.Call.WebsocketError != nil {
+		ws.config.Call.WebsocketError(text, err)
+	}else {
+		fmt.Println(text + ": ", err)
+	}
 }
