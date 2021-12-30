@@ -33,7 +33,7 @@ type OrmInitConfig struct {
 	MaxConn     int
 	MaxLifetime time.Duration
 	LogWrite 	io.Writer
-	TableCheck  func(*gorm.DB)
+	TableCheck  func(*gorm.DB) error
 }
 
 type ormNamer struct {
@@ -56,17 +56,20 @@ func GormInit(config OrmInitConfig) (*gorm.DB, error) {
 	gormConfig.NamingStrategy = ormNamer{}
 	db, err := gorm.Open(mysql.Open(config.SqlDsn), gormConfig)
 	if err != nil {
-		return db, err
+		return nil, err
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		return db, err
+		return nil, err
 	}
 	sqlDB.SetConnMaxLifetime(config.MaxLifetime) //每次操作数据库允许的最大时间限制
 	sqlDB.SetMaxIdleConns(config.MaxKeepConn)
 	sqlDB.SetMaxOpenConns(config.MaxConn)
 	if config.TableCheck != nil {
-		config.TableCheck(db)
+		err := config.TableCheck(db)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return db, err
 }

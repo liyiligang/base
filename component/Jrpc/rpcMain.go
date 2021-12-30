@@ -90,7 +90,7 @@ func GrpcServerInit(config RpcServerConfig) (*grpc.Server, error) {
 }
 
 func GrpcClientInit(config RpcClientConfig) (*grpc.ClientConn, error) {
-	creds, err := credentials.NewClientTLSFromFile(config.PublicKeyPath, config.CertName)
+	cred, err := credentials.NewClientTLSFromFile(config.PublicKeyPath, config.CertName)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func GrpcClientInit(config RpcClientConfig) (*grpc.ClientConn, error) {
 	if config.ConnectTimeOut != 0 {
 		ctx, _ = context.WithTimeout(ctx, config.ConnectTimeOut)
 	}
-	config.ClientOption = append(config.ClientOption, grpc.WithTransportCredentials(creds),
+	config.ClientOption = append(config.ClientOption, grpc.WithTransportCredentials(cred),
 		grpc.WithPerRPCCredentials(&rpcHeader{header: config.Header}))
 	conn, err := grpc.DialContext(ctx, config.Addr, config.ClientOption...)
 	if err != nil {

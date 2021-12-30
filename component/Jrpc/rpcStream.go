@@ -36,8 +36,8 @@ const ConstRpcStreamServerTrailer = "rpc-stream-server-trailer-bin"
 type RpcStreamCall struct {
 	RpcStreamConnect  		func(conn *RpcStream) (interface{}, error)
 	RpcStreamConnected  	func(conn *RpcStream) error
-	RpcStreamClosed 		func(conn *RpcStream)
-	RpcStreamReceiver   	func(conn *RpcStream, recv interface{})
+	RpcStreamClosed 		func(conn *RpcStream) error
+	RpcStreamReceiver   	func(conn *RpcStream, recv interface{}) error
 	RpcStreamError 			func(text string, err error)
 }
 
@@ -89,22 +89,24 @@ func (rpc *RpcStream) WriteRpcStreamServerHeader(data []byte) {
 
 // 初始化rpc流服务
 func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto proto.Message, call RpcStreamCall) (*RpcStream, error) {
-	rpcContext, err := ParseRpcContext(stream.Context())
-	if err != nil {
-		return nil, err
-	}
 	childCtx, childCancel := context.WithCancel(stream.Context())
 	conn := RpcStream{
 		send:         make(chan interface{}, 256),
 		cancel:       childCancel,
 		context:      childCtx,
-		rpcContext:   rpcContext,
 		recvMsgProto: recvMsgProto,
 		call:         call,
+	}
+	var err error
+	conn.rpcContext, err = ParseRpcContext(stream.Context())
+	if err != nil {
+		conn.rpcStreamError("parse rpc context fail", err)
+		return nil, err
 	}
 	if conn.call.RpcStreamConnect != nil {
 		id, err := conn.call.RpcStreamConnect(&conn)
 		if err != nil {
+			conn.rpcStreamError("call rpc stream connect fail", err)
 			stream.SetTrailer(setRpcStreamServerTrailer([]byte(err.Error())))
 			return nil, err
 		}
@@ -112,6 +114,7 @@ func GrpcStreamServerInit(stream grpc.ServerStream, recvMsgProto proto.Message, 
 	}
 	err = stream.SendHeader(setRpcStreamServerHeader(conn.rpcContext.RpcStreamServerHeader))
 	if err != nil {
+		conn.rpcStreamError("rpc stream send header fail", err)
 		return nil, err
 	}
 	return &conn, nil
@@ -126,13 +129,17 @@ func (rpc *RpcStream) GrpcStreamServerRun(stream grpc.ServerStream) error {
 	if rpc.call.RpcStreamConnected != nil {
 		err = rpc.call.RpcStreamConnected(rpc)
 		if err !=nil {
+			rpc.rpcStreamError("call rpc stream connected fail", err)
 			stream.SetTrailer(setRpcStreamServerTrailer([]byte(err.Error())))
 			rpc.Close(true)
 		}
 	}
 	<-rpc.context.Done()
 	if rpc.call.RpcStreamClosed != nil {
-		rpc.call.RpcStreamClosed(rpc)
+		cErr := rpc.call.RpcStreamClosed(rpc)
+		if cErr != nil {
+			rpc.rpcStreamError("call rpc stream closed fail", cErr)
+		}
 	}
 	return err
 }
@@ -148,6 +155,7 @@ func GrpcStreamClientInit(recvMsgProto proto.Message, call RpcStreamCall) (*RpcS
 	if conn.call.RpcStreamConnect != nil {
 		id, connErr := conn.call.RpcStreamConnect(conn)
 		if connErr !=  nil  {
+			conn.rpcStreamError("call rpc stream connect fail", connErr)
 			return nil, connErr
 		}
 		conn.rpcBindVal = id
@@ -168,11 +176,15 @@ func (rpc *RpcStream) GrpcStreamClientRun(stream grpc.ClientStream) error {
 		}
 		rpc.rpcContext.RpcStreamServerTrailer = getRpcStreamServerTrailer(stream.Trailer())
 		if rpc.call.RpcStreamClosed != nil {
-			rpc.call.RpcStreamClosed(rpc)
+			err := rpc.call.RpcStreamClosed(rpc)
+			if err != nil {
+				rpc.rpcStreamError("call rpc stream closed fail", err)
+			}
 		}
 	}()
 	header, err := stream.Header()
 	if err != nil {
+		rpc.rpcStreamError("rpc stream get header fail", err)
 		rpc.Close(true)
 		return err
 	}
@@ -180,6 +192,7 @@ func (rpc *RpcStream) GrpcStreamClientRun(stream grpc.ClientStream) error {
 	if rpc.call.RpcStreamConnected != nil {
 		err = rpc.call.RpcStreamConnected(rpc)
 		if err != nil {
+			rpc.rpcStreamError("call rpc stream connected fail", err)
 			rpc.Close(true)
 			return err
 		}
@@ -199,7 +212,10 @@ func (rpc *RpcStream) readMessage(ctx context.Context, recv func(m interface{}) 
 				return
 			}
 			if rpc.call.RpcStreamReceiver != nil {
-				rpc.call.RpcStreamReceiver(rpc, rpc.recvMsgProto)
+				err := rpc.call.RpcStreamReceiver(rpc, rpc.recvMsgProto)
+				if err != nil {
+					rpc.rpcStreamError("call rpc stream receiver fail", err)
+				}
 			}
 		}
 	}

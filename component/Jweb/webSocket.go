@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,9 +33,9 @@ const WebsocketCloseByServer = 4000
 type WebsocketCall struct {
 	WebsocketConnect		func(conn *WebsocketConn) (interface{}, error)
 	WebsocketConnected		func(conn *WebsocketConn) error
-	WebsocketClosed			func(conn *WebsocketConn, code int, text string)
-	WebsocketReceiver		func(conn *WebsocketConn, data *[]byte)
-	WebsocketPong			func(conn *WebsocketConn, pingData string) string
+	WebsocketClosed			func(conn *WebsocketConn, code int, text string) error
+	WebsocketReceiver		func(conn *WebsocketConn, data *[]byte) error
+	WebsocketPong			func(conn *WebsocketConn, pingData string) (string, error)
 	WebsocketError			func(text string, err error)
 }
 
@@ -61,6 +62,7 @@ type WebsocketConn struct {
 	cancel   	context.CancelFunc
 	config      WebsocketConfig
 	wsParm      WebsocketParm
+	sendCnt		int64
 	connBindVal interface{}
 }
 
@@ -107,7 +109,7 @@ func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, cl
 	if conn.config.Call.WebsocketConnect != nil {
 		id, err := conn.config.Call.WebsocketConnect(&conn)
 		if err != nil {
-			conn.closeWs("websocket init error", err)
+			conn.closeWs("call websocket connect fail", err)
 			return
 		}
 		conn.connBindVal = id
@@ -119,7 +121,7 @@ func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, cl
 	if conn.config.Call.WebsocketConnected != nil {
 		err = conn.config.Call.WebsocketConnected(&conn)
 		if err != nil {
-			conn.closeWs("websocket init error", err)
+			conn.closeWs("call websocket connected fail", err)
 			return
 		}
 	}
@@ -129,7 +131,7 @@ func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, cl
 func (ws *WebsocketConn) closeHandler(code int, text string) error {
 	ws.cancel()
 	if ws.config.Call.WebsocketClosed != nil {
-		ws.config.Call.WebsocketClosed(ws, code, text)
+		return ws.config.Call.WebsocketClosed(ws, code, text)
 	}
 	return nil
 }
@@ -137,8 +139,11 @@ func (ws *WebsocketConn) closeHandler(code int, text string) error {
 // ping回调
 func (ws *WebsocketConn) pingHandler(pingData string) error {
 	if ws.config.Call.WebsocketPong != nil {
-		data := ws.config.Call.WebsocketPong(ws, pingData)
-		err := ws.conn.WriteControl(websocket.PongMessage, []byte(data), ws.GetDeadline(ws.config.PongWaitTime))
+		data, err := ws.config.Call.WebsocketPong(ws, pingData)
+		if err != nil {
+			return err
+		}
+		err = ws.conn.WriteControl(websocket.PongMessage, []byte(data), ws.GetDeadline(ws.config.PongWaitTime))
 		if err != nil {
 			return err
 		}
@@ -164,17 +169,24 @@ func (ws *WebsocketConn) closeWs(text string, err error) {
 			ws.webSocketError("websocket close error", err)
 		}
 	}
-	_ = ws.closeHandler(WebsocketCloseByServer, err.Error())
+	cErr := ws.closeHandler(WebsocketCloseByServer, err.Error())
+	if cErr != nil {
+		ws.webSocketError("call websocket closed fail", cErr)
+	}
 	return
 }
 
 // 主动关闭连接
-func (ws *WebsocketConn) Close(msg string) {
+func (ws *WebsocketConn) Close(msg string, immediately bool) {
+	if !immediately {
+		ws.sendWait()
+	}
 	ws.closeWs("websocket is active close ", errors.New(msg))
 }
 
 // 发送Byte数据
 func (ws *WebsocketConn) SendByte(data *[]byte) {
+	atomic.AddInt64(&ws.sendCnt, 1)
 	ws.send <- *data
 }
 
@@ -186,6 +198,7 @@ func (ws *WebsocketConn) SendString(data string) {
 
 // 发送预处理数据
 func (ws *WebsocketConn) sendPreData(preData *websocket.PreparedMessage) {
+	atomic.AddInt64(&ws.sendCnt, 1)
 	ws.sendPre <- preData
 }
 
@@ -225,7 +238,10 @@ func (ws *WebsocketConn) readMessage() {
 				return
 			}
 			if ws.config.Call.WebsocketReceiver != nil {
-				ws.config.Call.WebsocketReceiver(ws, &message)
+				err := ws.config.Call.WebsocketReceiver(ws, &message)
+				if err != nil {
+					ws.webSocketError("call websocket receiver fail", err)
+				}
 			}
 		}
 	}
@@ -248,6 +264,7 @@ func (ws *WebsocketConn) writeMessage() {
 				return
 			}
 			err = ws.conn.WriteMessage(websocket.BinaryMessage, message)
+			atomic.AddInt64(&ws.sendCnt, -1)
 			if err != nil {
 				ws.closeWs("webSocket send error", err)
 				return
@@ -263,6 +280,7 @@ func (ws *WebsocketConn) writeMessage() {
 				return
 			}
 			err = ws.conn.WritePreparedMessage(preMessage)
+			atomic.AddInt64(&ws.sendCnt, -1)
 			if err != nil {
 				ws.closeWs("webSocket pre-send error", err)
 				return
@@ -304,5 +322,20 @@ func (ws *WebsocketConn) webSocketError(text string, err error) {
 		ws.config.Call.WebsocketError(text, err)
 	}else {
 		fmt.Println(text + ": ", err)
+	}
+}
+
+func (ws *WebsocketConn) sendWait() {
+	for {
+		select {
+		case <-ws.context.Done():
+			return
+		default:
+			if atomic.LoadInt64(&ws.sendCnt) > 0 {
+				time.Sleep(5 * time.Millisecond)
+			}else{
+				return
+			}
+		}
 	}
 }
