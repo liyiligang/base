@@ -16,10 +16,20 @@
 
 package Jtool
 
-import "time"
+import (
+	"time"
+)
+
+const TimeFormat = "2006-01-02 15:04:05"
 
 //获取标准时间格式字符串
 func GetCurTimeFormatStandard() string {
 	currentTime := time.Now()
-	return currentTime.Format("2006-01-02_15:04:05")
+	return currentTime.Format(TimeFormat)
+}
+
+//时间戳转时间
+func TimeUnixToFormat(timeUnix int64) string {
+	t := time.Unix(timeUnix, 0)
+	return t.Format(TimeFormat)
 }

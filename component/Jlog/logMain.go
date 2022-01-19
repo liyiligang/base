@@ -26,6 +26,7 @@ var globalSugared *zap.SugaredLogger
 
 type LogInitConfig struct {
 	Debug         bool
+	Level 		  string
 	LocalPath     string
 	MaxSize       int
 	MaxBackups    int
@@ -65,8 +66,8 @@ func InitLog(config LogInitConfig) *zap.SugaredLogger {
 
 	//其他日志配置
 	outConfig := fileOutputConfig()
+	outConfig.Level = getLevel(config.Level)
 	if config.Debug {
-		outConfig.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
 		outConfig.Development = true
 	}
 	outConfig.InitialFields = config.InitialFields
@@ -113,4 +114,23 @@ func IOWrite (key string, logger *zap.SugaredLogger) io.Writer {
 	}
 	ioWrite := &logIOWrite{msg: "", key: key, logger: logger}
 	return ioWrite
+}
+
+func getLevel (level string) zap.AtomicLevel {
+	switch level {
+	case "fatal":
+		return zap.NewAtomicLevelAt(zap.FatalLevel)
+	case "panic":
+		return zap.NewAtomicLevelAt(zap.PanicLevel)
+	case "dpanic":
+		return zap.NewAtomicLevelAt(zap.DPanicLevel)
+	case "error":
+		return zap.NewAtomicLevelAt(zap.ErrorLevel)
+	case "warn":
+		return zap.NewAtomicLevelAt(zap.WarnLevel)
+	case "info":
+		return zap.NewAtomicLevelAt(zap.InfoLevel)
+	default:
+		return zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
 }

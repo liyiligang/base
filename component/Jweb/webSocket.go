@@ -318,6 +318,9 @@ func (ws *WebsocketConn) webSocketError(text string, err error) {
 	if websocket.IsCloseError(err, websocket.CloseGoingAway) {
 		return
 	}
+	if errors.Is(err, websocket.ErrCloseSent) {
+		return
+	}
 	if ws.config.Call.WebsocketError != nil {
 		ws.config.Call.WebsocketError(text, err)
 	}else {

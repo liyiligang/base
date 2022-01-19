@@ -18,6 +18,9 @@ package Jorm
 
 import (
 	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
+	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
@@ -28,6 +31,7 @@ import (
 )
 
 type OrmInitConfig struct {
+	Name		string
 	SqlDsn      string
 	MaxKeepConn int
 	MaxConn     int
@@ -54,7 +58,23 @@ func GormInit(config OrmInitConfig) (*gorm.DB, error) {
 		gormConfig.Logger = newLogger
 	}
 	gormConfig.NamingStrategy = ormNamer{}
-	db, err := gorm.Open(mysql.Open(config.SqlDsn), gormConfig)
+
+	var dialector gorm.Dialector
+	switch config.Name {
+	case "mysql":
+		dialector = mysql.Open(config.SqlDsn)
+		break
+	case "postgresql":
+		dialector = postgres.Open(config.SqlDsn)
+		break
+	case "sqlserver":
+		dialector = sqlserver.Open(config.SqlDsn)
+		break
+	default:
+		dialector = sqlite.Open(config.SqlDsn)
+	}
+
+	db, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
 		return nil, err
 	}

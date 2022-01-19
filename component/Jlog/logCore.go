@@ -43,10 +43,7 @@ func initLogCore(config coreConfig) *zap.SugaredLogger {
 
 	//定义输出级别
 	priority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		if config.outConfig.Development {
-			return lvl >= zapcore.DebugLevel
-		}
-		return lvl >= zapcore.InfoLevel
+		return lvl >= config.outConfig.Level.Level()
 	})
 
 	//本地日志
