@@ -21,6 +21,7 @@ import (
 )
 
 const TimeFormat = "2006-01-02 15:04:05"
+const TimeFormatUTC = "2006-01-02T15:04:05.000Z"
 
 //获取标准时间格式字符串
 func GetCurTimeFormatStandard() string {

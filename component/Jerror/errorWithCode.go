@@ -20,7 +20,6 @@ import (
 	"github.com/liyiligang/base/component/Jtool"
 )
 
-// ErrWithCode 带错误码的错误类型
 type ErrWithCode struct {
 	Code  		int
 	Err   		error

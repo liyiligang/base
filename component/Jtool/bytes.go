@@ -17,7 +17,9 @@
 package Jtool
 
 import (
+	"archive/zip"
 	"bytes"
+	"io"
 )
 
 func ReadByteWithSize(data []byte, size uint64, call func ([]byte) error) error {
@@ -26,4 +28,24 @@ func ReadByteWithSize(data []byte, size uint64, call func ([]byte) error) error 
 	}
 	buffer := bytes.NewBuffer(data)
 	return ReadIOWithSize(buffer, size, call)
+}
+
+func CompressByteWithZip(dataName string, data []byte) ([]byte, error){
+	var err error
+	var zipBuffer = new(bytes.Buffer)
+	var zipWriter = zip.NewWriter(zipBuffer)
+	var zipEntry io.Writer
+	zipEntry, err = zipWriter.Create(dataName)
+	if err != nil {
+		return nil, err
+	}
+	_, err = zipEntry.Write(data)
+	if err != nil {
+		return nil, err
+	}
+	err = zipWriter.Close()
+	if err != nil {
+		return nil, err
+	}
+	return zipBuffer.Bytes(), nil
 }
