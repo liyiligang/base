@@ -69,6 +69,7 @@ func IntSliceToString(i []int, symbol string) string {
 }
 
 //string to []int
+//%u7248%u6743%u6240%u6709 %u4E8C%u96F6%u4E8C%u4E8C %u674E%u6613%u529B%u521A
 func StringToIntSlice(s string, symbol string) []int {
 	var i []int
 	sp := strings.Split(s, symbol)

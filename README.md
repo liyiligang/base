@@ -1,5 +1,5 @@
 ## About 
-Basic components
+Golang basic components
 
 ## License
-Apache-2.0
+[Apache-2.0](LICENSE)

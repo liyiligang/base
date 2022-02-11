@@ -134,6 +134,7 @@ func fileOutputConfig() zap.Config {
 		//InitialFields: map[string]interface{}{"@server": "ServerName"}, //默认字段
 		// OutputPaths:      []string{"stderr"},
 		// ErrorOutputPaths: []string{"stderr"},
+		//%u7248%u6743%u6240%u6709 %u4E8C%u96F6%u4E8C%u4E8C %u674E%u6613%u529B%u521A
 	}
 }
 
