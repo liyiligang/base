@@ -20,7 +20,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 	"unsafe"
 )
 
@@ -40,6 +39,11 @@ func BytesToStruct(b *[]byte) unsafe.Pointer {
 
 //int to string
 func IntToString(i int) string {
+	return strconv.FormatInt(int64(i), 10)
+}
+
+//int32 to string
+func Int32ToString(i int32) string {
 	return strconv.FormatInt(int64(i), 10)
 }
 
@@ -92,16 +96,6 @@ func StructToMap(st interface{}) map[string]interface{} {
 		data[strings.Title(stType.Field(i).Name)] = stVal.Field(i).Interface()
 	}
 	return data
-}
-
-//get time int64 (微秒)
-func GetMicrosecondTimeInt64() int64 {
-	return time.Now().UnixNano() / 1e6
-}
-
-//time to int64 (微秒)
-func TimeStringToMsTimeInt64(time time.Time) int64 {
-	return time.UnixNano() / 1e6
 }
 
 //[]rune to []byte

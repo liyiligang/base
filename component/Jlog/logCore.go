@@ -19,7 +19,6 @@ package Jlog
 import (
 	"io"
 	"os"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,14 +28,13 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-//核心配置
 type coreConfig struct {
-	output    io.Writer
-	outConfig zap.Config
-	encoder   zapcore.EncoderConfig
+	output      io.Writer
+	outConfig   zap.Config
+	encoder     zapcore.EncoderConfig
+	jsonEncoder bool
 }
 
-//创建日志核心服务
 func initLogCore(config coreConfig) *zap.SugaredLogger {
 	//初始化日志服务
 	var cores []zapcore.Core
@@ -49,7 +47,10 @@ func initLogCore(config coreConfig) *zap.SugaredLogger {
 	//本地日志
 	if config.output != nil {
 		localLog := zapcore.AddSync(config.output)
-		localLogEncoder := zapcore.NewJSONEncoder(config.encoder)
+		localLogEncoder := zapcore.NewConsoleEncoder(config.encoder)
+		if config.jsonEncoder {
+			localLogEncoder = zapcore.NewJSONEncoder(config.encoder)
+		}
 		cores = append(cores, zapcore.NewCore(localLogEncoder, localLog, priority))
 	}
 
@@ -58,6 +59,8 @@ func initLogCore(config coreConfig) *zap.SugaredLogger {
 		console := zapcore.Lock(os.Stdout)
 		consoleEncoderConfig := zap.NewDevelopmentEncoderConfig()
 		consoleEncoderConfig.EncodeTime = consoleTimeEncoder
+		consoleEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+		consoleEncoderConfig.EncodeCaller = zapcore.ShortCallerEncoder
 		consoleEncoder := zapcore.NewConsoleEncoder(consoleEncoderConfig)
 		cores = append(cores, zapcore.NewCore(consoleEncoder, console, priority))
 	}
@@ -148,33 +151,41 @@ func fileEncoderConfig() zapcore.EncoderConfig {
 		MessageKey:     "@message",
 		StacktraceKey:  "@stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalLevelEncoder,    //原生字段名大小写
+		EncodeLevel:    zapcore.CapitalLevelEncoder,    //原生字段名大写
 		EncodeTime:     fileTimeEncoder,                //时间参数格式
 		EncodeDuration: zapcore.SecondsDurationEncoder, //时间精确度(秒, 纳秒)
-		EncodeCaller:   fileCallerEncoder,              //定位格式(包名, 行数, 函数名)
+		EncodeCaller:   zapcore.FullCallerEncoder,      //定位格式(包名, 行数, 函数名)
 	}
 }
 
 //文件日志定位信息格式(文件名:行:函数名)
 func fileCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
-
 	var callerStr string
 	if !caller.Defined {
 		callerStr = "caller is not defined"
 	}
-
 	fileN := strings.Split(caller.File, "/")
-	funcN := strings.Split(runtime.FuncForPC(caller.PC).Name(), "/")
-	callerStr = funcN[len(funcN)-1] + "/" + fileN[len(fileN)-1] + "(" + strconv.Itoa(caller.Line) + ")"
+	callerStr = caller.Function + "/" + fileN[len(fileN)-1] + "(" + strconv.Itoa(caller.Line) + ")"
+	enc.AppendString(callerStr)
+}
+
+//日志文件时间格式
+func fileTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
+	enc.AppendString(t.Format("2006-01-02 15:04:05.000"))
+}
+
+//控制台日志定位信息格式(文件名:行:函数名)
+func consoleCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
+	var callerStr string
+	if !caller.Defined {
+		callerStr = "caller is not defined"
+	}
+	fileN := strings.Split(caller.File, "/")
+	callerStr = fileN[len(fileN)-1] + ":" + strconv.Itoa(caller.Line)
 	enc.AppendString(callerStr)
 }
 
 //控制台时间格式
 func consoleTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	enc.AppendString(t.Format("15:04:05.000"))
-}
-
-//日志文件时间格式
-func fileTimeEncoder(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	enc.AppendString(t.Format("20060102-15:04:05.000"))
+	enc.AppendString(t.Format("2006-01-02 15:04:05.000"))
 }

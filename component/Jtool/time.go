@@ -21,6 +21,7 @@ import (
 )
 
 const TimeFormat = "2006-01-02 15:04:05"
+const TimeFormatSeries = "20060102150405"
 const TimeFormatUTC = "2006-01-02T15:04:05.000Z"
 
 //获取标准时间格式字符串
@@ -29,8 +30,29 @@ func GetCurTimeFormatStandard() string {
 	return currentTime.Format(TimeFormat)
 }
 
-//时间戳转时间
+//获取标准时间连续格式字符串
+func GetCurTimeFormatSeries() string {
+	currentTime := time.Now()
+	return currentTime.Format(TimeFormatSeries)
+}
+
+//时间戳转时间字符串
 func TimeUnixToFormat(timeUnix int64) string {
 	t := time.Unix(timeUnix, 0)
 	return t.Format(TimeFormat)
+}
+
+//时间戳转time.Time
+func TimeUnixToTime(timeUnix int64) time.Time {
+	return time.Unix(timeUnix, 0)
+}
+
+//get time int64 (微秒)
+func GetMicrosecondTimeInt64() int64 {
+	return time.Now().UnixNano() / 1e6
+}
+
+//time.Time to int64 (微秒)
+func TimeStringToMsTimeInt64(time time.Time) int64 {
+	return time.UnixNano() / 1e6
 }

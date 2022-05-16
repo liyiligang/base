@@ -20,43 +20,47 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/natefinch/lumberjack.v2"
 	"io"
+	"strings"
 )
 
-var globalSugared *zap.SugaredLogger
+var logHandle *zap.SugaredLogger
 
-type LogInitConfig struct {
+type LogConfig struct {
 	Debug         bool
-	Level 		  string
-	LocalPath     string
+	Path          string
+	Level         string
 	MaxSize       int
 	MaxBackups    int
 	MaxAge        int
+	Json          bool
 	InitialFields map[string]interface{}
 }
 
-type logIOWrite struct {
-	msg 	string
-	key 	string
-	logger 	*zap.SugaredLogger
+type logIOWrite struct{
+	level       string
 }
-
-func (w *logIOWrite) Write(p []byte) (n int, err error){
-	w.logger.Infow(w.msg, w.key, string(p))
+func (w *logIOWrite) Write(p []byte) (n int, err error) {
+	switch strings.ToLower(w.level) {
+	case "error":
+		Error(string(p))
+	case "warn":
+		Warn(string(p))
+	case "info":
+		Info(string(p))
+	default:
+		Debug(string(p))
+	}
 	return
 }
 
-func InitGlobalLog(config LogInitConfig) {
-	globalSugared = InitLog(config)
-}
-
-func InitLog(config LogInitConfig) *zap.SugaredLogger {
+func InitLog(config LogConfig) {
 
 	//配置编码格式
 	encoder := fileEncoderConfig()
 
 	//配置输出文件
 	ioWriter := &lumberjack.Logger{
-		Filename:   config.LocalPath,  // 日志文件路径
+		Filename:   config.Path,       // 日志文件路径
 		MaxSize:    config.MaxSize,    // 每个日志文件保存的最大尺寸 单位：M
 		MaxBackups: config.MaxBackups, // 最多保存多少个日志文件
 		MaxAge:     config.MaxAge,     // 日志文件最多保存多少天
@@ -73,51 +77,76 @@ func InitLog(config LogInitConfig) *zap.SugaredLogger {
 	outConfig.InitialFields = config.InitialFields
 
 	//初始化服务核心
-	return initLogCore(coreConfig{
+	logHandle = initLogCore(coreConfig{
 		output:    ioWriter,
 		encoder:   encoder,
 		outConfig: outConfig,
+		jsonEncoder: config.Json,
 	})
 }
 
-func Debug(str string, keysAndValues ...interface{}) {
-	globalSugared.Debugw(str, keysAndValues...)
+func Debug(keysAndValues ...interface{}) {
+	logHandle.Debug(keysAndValues...)
 }
 
-func Info(str string, keysAndValues ...interface{}) {
-	globalSugared.Infow(str, keysAndValues...)
+func Info(keysAndValues ...interface{}) {
+	logHandle.Info(keysAndValues...)
 }
 
-func Warn(str string, keysAndValues ...interface{}) {
-	globalSugared.Warnw(str, keysAndValues...)
+func Warn(keysAndValues ...interface{}) {
+	logHandle.Warn(keysAndValues...)
 }
 
-func Error(str string, keysAndValues ...interface{}) {
-	globalSugared.Errorw(str, keysAndValues...)
+func Error(keysAndValues ...interface{}) {
+	logHandle.Error(keysAndValues...)
 }
 
-func DPanic(str string, keysAndValues ...interface{}) {
-	globalSugared.DPanicw(str, keysAndValues...)
+func DPanic(keysAndValues ...interface{}) {
+	logHandle.DPanic(keysAndValues...)
 }
 
-func Panic(str string, keysAndValues ...interface{}) {
-	globalSugared.Panicw(str, keysAndValues...)
+func Panic(keysAndValues ...interface{}) {
+	logHandle.Panic(keysAndValues...)
 }
 
-func Fatal(str string, keysAndValues ...interface{}) {
-	globalSugared.Fatalw(str, keysAndValues...)
+func Fatal(keysAndValues ...interface{}) {
+	logHandle.Fatal(keysAndValues...)
 }
 
-func IOWrite (key string, logger *zap.SugaredLogger) io.Writer {
-	if logger == nil {
-		logger = globalSugared
-	}
-	ioWrite := &logIOWrite{msg: "", key: key, logger: logger}
-	return ioWrite
+func DebugW(str string, keysAndValues ...interface{}) {
+	logHandle.Debugw(str, keysAndValues...)
 }
 
-func getLevel (level string) zap.AtomicLevel {
-	switch level {
+func InfoW(str string, keysAndValues ...interface{}) {
+	logHandle.Infow(str, keysAndValues...)
+}
+
+func WarnW(str string, keysAndValues ...interface{}) {
+	logHandle.Warnw(str, keysAndValues...)
+}
+
+func ErrorW(str string, keysAndValues ...interface{}) {
+	logHandle.Errorw(str, keysAndValues...)
+}
+
+func DPanicW(str string, keysAndValues ...interface{}) {
+	logHandle.DPanicw(str, keysAndValues...)
+}
+
+func PanicW(str string, keysAndValues ...interface{}) {
+	logHandle.Panicw(str, keysAndValues...)
+}
+
+func FatalW(str string, keysAndValues ...interface{}) {
+	logHandle.Fatalw(str, keysAndValues...)
+}
+
+func GetLogger(level string) io.Writer {
+	return &logIOWrite{level: level}
+}
+
+func getLevel(level string) zap.AtomicLevel {
+	switch strings.ToLower(level) {
 	case "fatal":
 		return zap.NewAtomicLevelAt(zap.FatalLevel)
 	case "panic":

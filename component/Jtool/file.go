@@ -17,12 +17,14 @@
 package Jtool
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"io/ioutil"
 	"os"
 )
 
-//创建系统临时文件
-func CreateSysTmpFile(fileName string, data []byte)(string, error){
+// CreateSysTmpFile 创建系统临时文件
+func CreateSysTmpFile(fileName string, data []byte) (string, error) {
 	tmpFile, err := ioutil.TempFile(os.TempDir(), fileName)
 	if err != nil {
 		return "", err
@@ -34,36 +36,67 @@ func CreateSysTmpFile(fileName string, data []byte)(string, error){
 	return tmpFile.Name(), err
 }
 
-//判断文件是否存在
-func IsFileExist(filePath string) bool{
+// IsFileExist 判断文件是否存在
+func IsFileExist(filePath string) bool {
 	s, err := os.Lstat(filePath)
 	return !os.IsNotExist(err) && !s.IsDir()
 }
 
-//判断文件夹是否存在
-func IsDirExist(dirPath string) bool{
-	s, err:=os.Stat(dirPath)
-	if err != nil{
-		return false
+// IsDirExist 判断文件夹是否存在
+func IsDirExist(dirPath string) (bool, error) {
+	s, err := os.Stat(dirPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
 	}
-	return s.IsDir()
+	return s.IsDir(), nil
 }
 
-//创建文件夹
+// MakeDir 创建文件夹
 func MakeDir(dirPath string) error {
-	err := os.Mkdir(dirPath,755)
-	if err != nil{
+	err := os.MkdirAll(dirPath, 755)
+	if err != nil {
 		return err
 	}
 	return nil
 }
 
-//按字节读取文件
-func ReadFileWithSize(fileName string, size uint64, call func ([]byte) error) error {
+// MakeDirIfNoExist 判断文件夹是否存在, 不存在则创建
+func MakeDirIfNoExist(dirPath string) (bool, error) {
+	isExist, err := IsDirExist(dirPath)
+	if err != nil {
+		return false, err
+	}
+	if isExist {
+		return true, nil
+	} else {
+		err := MakeDir(dirPath)
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+}
+
+// ReadFileWithSize 按字节读取文件
+func ReadFileWithSize(fileName string, size uint64, call func([]byte) error) error {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
 	return ReadIOWithSize(file, size, call)
+}
+
+// GetFileMd5 获取文件Md5值
+func GetFileMd5(filePath string) (string, error) {
+	body, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		return "", err
+	}
+	m := md5.New()
+	m.Write(body)
+	return hex.EncodeToString(m.Sum(nil)), nil
 }

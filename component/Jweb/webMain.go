@@ -26,37 +26,33 @@ import (
 	"net/http"
 )
 
-
-// web服务初始化配置
-type WebInitConfig struct {
-	Debug               bool
-	Addr            	string
-	IsHttps             bool
-	PublicKeyPath  		string
-	PrivateKeyPath 		string
-	RedirectAddr		string					//将此地址以http重定向至https
-	LogWrite 			io.Writer
-	RouteCall       	func(r *gin.Engine)
+type WebConfig struct {
+	Debug          bool
+	Origin         bool
+	Addr           string
+	PublicKeyPath  string
+	PrivateKeyPath string
+	AccessWrite    io.Writer
+	ErrorWrite     io.Writer
+	RouteCall      func(r *gin.Engine)
 }
 
-// web服务初始化
-func WebInit(config WebInitConfig) *http.Server {
+func WebInit(config WebConfig) *http.Server {
 	if !config.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
-	if config.LogWrite != nil {
-		gin.DefaultWriter = config.LogWrite
-		gin.DefaultErrorWriter = config.LogWrite
+	gin.DisableConsoleColor()
+	if config.AccessWrite != nil {
+		gin.DefaultWriter = config.AccessWrite
+	}
+	if config.ErrorWrite != nil {
+		gin.DefaultErrorWriter = config.ErrorWrite
 	}
 
 	r := gin.Default()
-	r.Use(accessOrigin)
-
-	if config.IsHttps && config.RedirectAddr != "" {
-		r.Use(redirectHttp(Jtool.GetPortFromAddr(config.Addr)))
+	if config.Origin {
+		r.Use(accessOrigin)
 	}
-
 	if config.RouteCall != nil {
 		config.RouteCall(r)
 	}
@@ -65,16 +61,10 @@ func WebInit(config WebInitConfig) *http.Server {
 		Addr:    config.Addr,
 		Handler: r,
 	}
-
 	go func() {
-		if config.IsHttps {
-			if config.IsHttps && config.RedirectAddr != "" {
-				go func() {
-					config.initError(http.ListenAndServe(config.RedirectAddr, r))
-				}()
-			}
+		if config.PublicKeyPath != "" && config.PrivateKeyPath != "" {
 			config.initError(srv.ListenAndServeTLS(config.PublicKeyPath, config.PrivateKeyPath))
-		} else {
+		}else {
 			config.initError(srv.ListenAndServe())
 		}
 	}()
@@ -82,9 +72,9 @@ func WebInit(config WebInitConfig) *http.Server {
 }
 
 //错误处理
-func (config *WebInitConfig) initError(err error) {
+func (config *WebConfig) initError(err error) {
 	if err != nil && err != http.ErrServerClosed {
-		log.Panic("web server startup failed: ", err)
+		log.Panic("web server start up failed: ", err)
 	}
 }
 
@@ -96,7 +86,7 @@ func accessOrigin(c *gin.Context) {
 	c.Header("Access-Control-Expose-Headers", "Content-Length, Access-Control-Allow-Origin, X-Requested-With, Access-Control-Allow-Headers, Content-Type")
 	c.Header("Access-Control-Allow-Credentials", "true")
 
-	if c.Request.Method == "OPTIONS"{
+	if c.Request.Method == "OPTIONS" {
 		c.Abort()
 		c.Writer.WriteHeader(http.StatusOK)
 		return
@@ -121,5 +111,3 @@ func redirectHttp(port string) gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-

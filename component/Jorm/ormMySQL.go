@@ -30,13 +30,14 @@ import (
 	"unicode"
 )
 
-type OrmInitConfig struct {
-	Name		string
+type OrmConfig struct {
+	Name        string
 	SqlDsn      string
 	MaxKeepConn int
 	MaxConn     int
 	MaxLifetime time.Duration
-	LogWrite 	io.Writer
+	ShowLog		bool
+	LogWrite    io.Writer
 	TableCheck  func(*gorm.DB) error
 }
 
@@ -44,20 +45,26 @@ type ormNamer struct {
 	schema.NamingStrategy
 }
 
-func GormInit(config OrmInitConfig) (*gorm.DB, error) {
+func GormInit(config OrmConfig) (*gorm.DB, error) {
 	gormConfig := &gorm.Config{}
+	logLevel := logger.Warn
+	if config.ShowLog {
+		logLevel = logger.Info
+	}
 	if config.LogWrite != nil {
 		newLogger := logger.New(
-			log.New(config.LogWrite, "\r\n", log.LstdFlags), // io writer
+			log.New(config.LogWrite, "", 0), // io writer
 			logger.Config{
-				SlowThreshold: time.Second,   // 慢 SQL 阈值
-				LogLevel:      logger.Silent, // Log level
-				Colorful:      false,         // 禁用彩色打印
+				SlowThreshold:             time.Second,   // 慢 SQL 阈值
+				LogLevel:                  logLevel,   	  // Log level
+				IgnoreRecordNotFoundError: false,         // 忽略ErrRecordNotFound(记录未找到)错误
+				Colorful:                  false,         // 禁用彩色打印
 			},
 		)
-		gormConfig.Logger = newLogger
+		gormConfig.Logger = newLogger					  //设置日志输出
 	}
-	gormConfig.NamingStrategy = ormNamer{}
+
+	gormConfig.NamingStrategy = ormNamer{}				  //设置自动生成表名, 字段名等规则
 
 	var dialector gorm.Dialector
 	switch config.Name {
@@ -94,7 +101,7 @@ func GormInit(config OrmInitConfig) (*gorm.DB, error) {
 	return db, err
 }
 
-func (namer ormNamer) getLowerStr(str string) string{
+func (namer ormNamer) getLowerStr(str string) string {
 	r := []rune(str)
 	if len(r) != 0 {
 		r[0] = unicode.ToLower(r[0])
