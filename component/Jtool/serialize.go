@@ -57,6 +57,16 @@ func Uint64ToString(i uint64) string {
 	return strconv.FormatInt(int64(i), 10)
 }
 
+//float32 to string
+func Float32ToString(f float32, prec int) string {
+	return strconv.FormatFloat(float64(f), 'f', prec,32)
+}
+
+//float64 to string
+func Float64ToString(f float64, prec int) string {
+	return strconv.FormatFloat(f, 'f', prec,64)
+}
+
 //string to int64
 func StringToInt64(s string) int64 {
 	i, _ := strconv.ParseInt(s, 10, 64)
@@ -119,7 +129,7 @@ func SliceToInterfaceSlice(data interface{}) []interface{} {
 		return nil
 	}
 	itemList := make([]interface{}, valLen)
-	for i := 0; i < valLen; i++{
+	for i := 0; i < valLen; i++ {
 		itemList[i] = val.Index(i).Interface()
 	}
 	return itemList

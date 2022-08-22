@@ -19,8 +19,11 @@ package Jtool
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"os"
+	"strings"
 )
 
 // CreateSysTmpFile 创建系统临时文件
@@ -80,6 +83,20 @@ func MakeDirIfNoExist(dirPath string) (bool, error) {
 	}
 }
 
+// 按文件名查找指定目录下的一个文件
+func FindDirFileWithFileName(dirPath string, fileName string) (string, error) {
+	fileList, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		return "", err
+	}
+	for _, file := range fileList {
+		if !file.IsDir() && strings.Contains(file.Name(), fileName) {
+			return file.Name(), nil
+		}
+	}
+	return "", nil
+}
+
 // ReadFileWithSize 按字节读取文件
 func ReadFileWithSize(fileName string, size uint64, call func([]byte) error) error {
 	file, err := os.Open(fileName)
@@ -90,8 +107,18 @@ func ReadFileWithSize(fileName string, size uint64, call func([]byte) error) err
 	return ReadIOWithSize(file, size, call)
 }
 
-// GetFileMd5 获取文件Md5值
-func GetFileMd5(filePath string) (string, error) {
+// GetFileMd5 获取文件Md5值(file)
+func GetFileMd5(file multipart.File) (string, error) {
+	hash := md5.New()
+	_, err := io.Copy(hash, file)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+// GetFileMd5WithPath 获取文件Md5值(path)
+func GetFileMd5WithPath(filePath string) (string, error) {
 	body, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return "", err
@@ -100,3 +127,5 @@ func GetFileMd5(filePath string) (string, error) {
 	m.Write(body)
 	return hex.EncodeToString(m.Sum(nil)), nil
 }
+
+
