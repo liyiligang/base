@@ -90,8 +90,15 @@ func FindDirFileWithFileName(dirPath string, fileName string) (string, error) {
 		return "", err
 	}
 	for _, file := range fileList {
-		if !file.IsDir() && strings.Contains(file.Name(), fileName) {
-			return file.Name(), nil
+		if !file.IsDir() {
+			name := file.Name()
+			n := strings.LastIndex(file.Name(), ".")
+			if n >= 0 {
+				name = name[:n]
+			}
+			if name ==  fileName{
+				return file.Name(), nil
+			}
 		}
 	}
 	return "", nil
@@ -127,5 +134,3 @@ func GetFileMd5WithPath(filePath string) (string, error) {
 	m.Write(body)
 	return hex.EncodeToString(m.Sum(nil)), nil
 }
-
-
