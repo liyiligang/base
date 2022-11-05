@@ -17,6 +17,7 @@
 package Jtool
 
 import (
+	"encoding/hex"
 	"errors"
 	"math/rand"
 	"time"
@@ -26,6 +27,7 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+// GetRandInt 获取随机整数
 func GetRandInt(low int, high int) (int, error) {
 	if low < 0 || high < 0 {
 		return 0, errors.New("random number interval cannot be negative")
@@ -39,6 +41,7 @@ func GetRandInt(low int, high int) (int, error) {
 	return rand.Intn(high-low) + low, nil
 }
 
+// GetRandChinese 获取随机中文
 func GetRandChinese(min int, max int) string {
 	length, _ := GetRandInt(min, max)
 	c := make([]rune, length)
@@ -47,4 +50,11 @@ func GetRandChinese(min int, max int) string {
 		c[i]=rune(int64(h))
 	}
 	return string(c)
+}
+
+// GetRandString 获取随机字符串
+func GetRandString(n int) string {
+	result := make([]byte, n/2)
+	rand.Read(result)
+	return hex.EncodeToString(result)
 }

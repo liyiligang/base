@@ -1,6 +1,8 @@
 package Jtool
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"github.com/mattn/go-runewidth"
 	"strings"
@@ -26,4 +28,12 @@ func SubStrWithCount(str string, sep string, cnt int) (string, error) {
 // 例如: GetStrWidth("abc哈哈123"); 返回 10
 func GetStrWidth(str string) int {
 	return runewidth.StringWidth(str)
+}
+
+// EncryptionStrWithSha256 使用Sha256算法加密字符串
+func EncryptionStrWithSha256(str string) string {
+	m := sha256.New()
+	m.Write([]byte(str))
+	res := hex.EncodeToString(m.Sum(nil))
+	return res
 }
