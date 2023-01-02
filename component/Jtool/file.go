@@ -83,7 +83,7 @@ func MakeDirIfNoExist(dirPath string) (bool, error) {
 	}
 }
 
-// 按文件名查找指定目录下的一个文件
+// 按文件名查找指定目录下的一个文件 (与后缀无关)
 func FindDirFileWithFileName(dirPath string, fileName string) (string, error) {
 	fileList, err := ioutil.ReadDir(dirPath)
 	if err != nil {
