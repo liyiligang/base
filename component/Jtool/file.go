@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"os"
+	"path"
 	"strings"
 )
 
@@ -96,7 +97,7 @@ func FindDirFileWithFileName(dirPath string, fileName string) (string, error) {
 			if n >= 0 {
 				name = name[:n]
 			}
-			if name ==  fileName{
+			if name == fileName {
 				return file.Name(), nil
 			}
 		}
@@ -133,4 +134,14 @@ func GetFileMd5WithPath(filePath string) (string, error) {
 	m := md5.New()
 	m.Write(body)
 	return hex.EncodeToString(m.Sum(nil)), nil
+}
+
+//获取文件名后缀
+func GetFileNameExt(fileName string) string {
+	return path.Ext(fileName)
+}
+
+//获取文件名不带后缀
+func GetFileNameOnly(fileName string) string {
+	return strings.TrimSuffix(fileName, path.Ext(fileName))
 }
