@@ -64,7 +64,7 @@ type RpcContext struct {
 }
 
 func GrpcServerInit(config RpcServerConfig) (*grpc.Server, error) {
-	lis, err := net.Listen("tcp", config.Addr)
+	lis, err := net.Listen("tcp4", config.Addr)
 	if err != nil {
 		return nil, err
 	}
