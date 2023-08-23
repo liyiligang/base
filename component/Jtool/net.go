@@ -17,7 +17,7 @@
 package Jtool
 
 import (
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -40,7 +40,7 @@ func GetPublicIP() string {
 		return ""
 	}
 	defer resp.Body.Close()
-	content, _ := ioutil.ReadAll(resp.Body)
+	content, _ := io.ReadAll(resp.Body)
 	return string(content)
 }
 

@@ -20,7 +20,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"os"
 	"path"
@@ -29,7 +28,7 @@ import (
 
 // CreateSysTmpFile 创建系统临时文件
 func CreateSysTmpFile(fileName string, data []byte) (string, error) {
-	tmpFile, err := ioutil.TempFile(os.TempDir(), fileName)
+	tmpFile, err := os.CreateTemp(os.TempDir(), fileName)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +85,7 @@ func MakeDirIfNoExist(dirPath string) (bool, error) {
 
 // 按文件名查找指定目录下的一个文件 (与后缀无关)
 func FindDirFileWithFileName(dirPath string, fileName string) (string, error) {
-	fileList, err := ioutil.ReadDir(dirPath)
+	fileList, err := os.ReadDir(dirPath)
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +126,7 @@ func GetFileMd5(file multipart.File) (string, error) {
 
 // GetFileMd5WithPath 获取文件Md5值(path)
 func GetFileMd5WithPath(filePath string) (string, error) {
-	body, err := ioutil.ReadFile(filePath)
+	body, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err
 	}
@@ -136,12 +135,12 @@ func GetFileMd5WithPath(filePath string) (string, error) {
 	return hex.EncodeToString(m.Sum(nil)), nil
 }
 
-//获取文件名后缀
+// 获取文件名后缀
 func GetFileNameExt(fileName string) string {
 	return path.Ext(fileName)
 }
 
-//获取文件名不带后缀
+// 获取文件名不带后缀
 func GetFileNameOnly(fileName string) string {
 	return strings.TrimSuffix(fileName, path.Ext(fileName))
 }

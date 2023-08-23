@@ -12,7 +12,7 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
-*/
+ */
 
 package Jtoken
 
@@ -20,23 +20,23 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt"
-	"io/ioutil"
+	"os"
 	"time"
 )
 
 var key string
 
 type TokenConfig struct {
-	Key           	string
-	ID        	  	int64
-	StartDuration 	time.Duration
-	StopDuration  	time.Duration
-	Custom      	map[string]interface{}
+	Key           string
+	ID            int64
+	StartDuration time.Duration
+	StopDuration  time.Duration
+	Custom        map[string]interface{}
 }
 
 func GetSecretByPath(keyPath string) (string, error) {
 	if key == "" {
-		bytes, err := ioutil.ReadFile(keyPath)
+		bytes, err := os.ReadFile(keyPath)
 		if err != nil {
 			return "", err
 		} else {
@@ -59,7 +59,7 @@ func GetToken(config TokenConfig) string {
 	Claims := jwt.MapClaims{
 		"jti":           config.ID,
 		"nbf":           time.Now().Add(config.StartDuration).Unix(),
-		"exp":           time.Now().Add(config.StartDuration+config.StopDuration).Unix(),
+		"exp":           time.Now().Add(config.StartDuration + config.StopDuration).Unix(),
 		"iat":           time.Now().Unix(),
 		"startDuration": config.StartDuration,
 		"stopDuration":  config.StopDuration,
@@ -91,8 +91,7 @@ func ParseToken(tokenString string, key string) (jwt.MapClaims, error) {
 		return nil, errors.New("token.Claims assert fail with jwt.MapClaims")
 	}
 	if !token.Valid {
-		return nil, errors.New("token "+ tokenString + " is invalid")
+		return nil, errors.New("token " + tokenString + " is invalid")
 	}
 	return claims, nil
 }
-

@@ -36,7 +36,7 @@ type OrmConfig struct {
 	MaxKeepConn int
 	MaxConn     int
 	MaxLifetime time.Duration
-	ShowLog		bool
+	ShowLog     bool
 	LogWrite    io.Writer
 	TableCheck  func(*gorm.DB) error
 }
@@ -55,16 +55,16 @@ func GormInit(config OrmConfig) (*gorm.DB, error) {
 		newLogger := logger.New(
 			log.New(config.LogWrite, "", 0), // io writer
 			logger.Config{
-				SlowThreshold:             time.Second,   // 慢 SQL 阈值
-				LogLevel:                  logLevel,   	  // Log level
-				IgnoreRecordNotFoundError: false,         // 忽略ErrRecordNotFound(记录未找到)错误
-				Colorful:                  false,         // 禁用彩色打印
+				SlowThreshold:             time.Second, // 慢 SQL 阈值
+				LogLevel:                  logLevel,    // Log level
+				IgnoreRecordNotFoundError: false,       // 忽略ErrRecordNotFound(记录未找到)错误
+				Colorful:                  false,       // 禁用彩色打印
 			},
 		)
-		gormConfig.Logger = newLogger					  //设置日志输出
+		gormConfig.Logger = newLogger //设置日志输出
 	}
 
-	gormConfig.NamingStrategy = ormNamer{}				  //设置自动生成表名, 字段名等规则
+	gormConfig.NamingStrategy = ormNamer{} //设置自动生成表名, 字段名等规则
 
 	var dialector gorm.Dialector
 	switch config.Name {

@@ -7,4 +7,3 @@ func ReverseSlice[T any](slice []T) []T {
 	}
 	return slice
 }
-
