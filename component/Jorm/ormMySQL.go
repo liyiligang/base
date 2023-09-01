@@ -27,7 +27,6 @@ import (
 	"io"
 	"log"
 	"time"
-	"unicode"
 )
 
 type OrmConfig struct {
@@ -38,11 +37,8 @@ type OrmConfig struct {
 	MaxLifetime time.Duration
 	ShowLog     bool
 	LogWrite    io.Writer
+	schemaNamer schema.Namer
 	TableCheck  func(*gorm.DB) error
-}
-
-type ormNamer struct {
-	schema.NamingStrategy
 }
 
 func GormInit(config OrmConfig) (*gorm.DB, error) {
@@ -64,7 +60,7 @@ func GormInit(config OrmConfig) (*gorm.DB, error) {
 		gormConfig.Logger = newLogger //设置日志输出
 	}
 
-	gormConfig.NamingStrategy = ormNamer{} //设置自动生成表名, 字段名等规则
+	gormConfig.NamingStrategy = config.schemaNamer //设置自动生成表名, 字段名等规则
 
 	var dialector gorm.Dialector
 	switch config.Name {
@@ -101,22 +97,26 @@ func GormInit(config OrmConfig) (*gorm.DB, error) {
 	return db, err
 }
 
-func (namer ormNamer) getLowerStr(str string) string {
-	r := []rune(str)
-	if len(r) != 0 {
-		r[0] = unicode.ToLower(r[0])
-	}
-	return string(r)
-}
+//type ormNamer struct {
+//	schema.NamingStrategy
+//}
+//
+//func (namer ormNamer) getLowerStr(str string) string {
+//	r := []rune(str)
+//	if len(r) != 0 {
+//		r[0] = unicode.ToLower(r[0])
+//	}
+//	return string(r)
+//}
 
-func (namer ormNamer) TableName(table string) string {
-	return namer.getLowerStr(table)
-}
-
-func (namer ormNamer) ColumnName(table, column string) string {
-	return namer.getLowerStr(column)
-}
-
-func (namer ormNamer) IndexName(table, column string) string {
-	return namer.getLowerStr(column)
-}
+//func (namer ormNamer) TableName(table string) string {
+//	return namer.getLowerStr(table)
+//}
+//
+//func (namer ormNamer) ColumnName(table, column string) string {
+//	return namer.getLowerStr(column)
+//}
+//
+//func (namer ormNamer) IndexName(table, column string) string {
+//	return namer.getLowerStr(column)
+//}
