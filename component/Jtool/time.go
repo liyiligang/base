@@ -72,7 +72,7 @@ func MsTimeUnixTo(timeUnix int64) string {
 		return "1 秒"
 	}
 
-	timeUnix = timeUnix/1000
+	timeUnix = timeUnix / 1000
 	if timeUnix < 60 {
 		return Int64ToString(timeUnix) + " 秒"
 	}
@@ -82,9 +82,11 @@ func MsTimeUnixTo(timeUnix int64) string {
 		return Int64ToString(timeUnix) + " 分钟"
 	}
 
-	timeUnix = timeUnix / 24
+	timeUnix = timeUnix / 60
 	if timeUnix < 24 {
 		return Int64ToString(timeUnix) + " 小时"
 	}
+
+	timeUnix = timeUnix / 24
 	return Int64ToString(timeUnix) + " 天"
 }

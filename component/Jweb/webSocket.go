@@ -31,12 +31,12 @@ const WebsocketCloseByServer = 4000
 
 // Websocket接口配置
 type WebsocketCall struct {
-	WebsocketConnect		func(conn *WebsocketConn) (interface{}, error)
-	WebsocketConnected		func(conn *WebsocketConn) error
-	WebsocketClosed			func(conn *WebsocketConn, code int, text string) error
-	WebsocketReceiver		func(conn *WebsocketConn, data *[]byte) error
-	WebsocketPong			func(conn *WebsocketConn, pingData string) (string, error)
-	WebsocketError			func(text string, err error)
+	WebsocketConnect   func(conn *WebsocketConn) (interface{}, error)
+	WebsocketConnected func(conn *WebsocketConn) error
+	WebsocketClosed    func(conn *WebsocketConn, code int, text string) error
+	WebsocketReceiver  func(conn *WebsocketConn, data *[]byte) error
+	WebsocketPong      func(conn *WebsocketConn, pingData string) (string, error)
+	WebsocketError     func(text string, err error)
 }
 
 // Websocket配置参数
@@ -46,6 +46,7 @@ type WebsocketConfig struct {
 	PingWaitTime  time.Duration
 	PongWaitTime  time.Duration
 	Call          WebsocketCall
+	UserConfig    interface{}
 }
 
 type WebsocketParm struct {
@@ -59,10 +60,10 @@ type WebsocketConn struct {
 	send        chan []byte
 	sendPre     chan *websocket.PreparedMessage
 	context     context.Context
-	cancel   	context.CancelFunc
+	cancel      context.CancelFunc
 	config      WebsocketConfig
 	wsParm      WebsocketParm
-	sendCnt		int64
+	sendCnt     int64
 	connBindVal interface{}
 }
 
@@ -87,11 +88,11 @@ func (config *WebsocketConfig) WsHandle(c *gin.Context) {
 func wsConnect(ginContext *gin.Context, config WebsocketConfig, login string, clientIP string) {
 	ctx, ctxCancel := context.WithCancel(context.Background())
 	conn := WebsocketConn{
-		send:      make(chan []byte, 256),
-		sendPre:   make(chan *websocket.PreparedMessage, 10),
-		config:    config,
-		context:   ctx,
-		cancel:    ctxCancel,
+		send:    make(chan []byte, 256),
+		sendPre: make(chan *websocket.PreparedMessage, 10),
+		config:  config,
+		context: ctx,
+		cancel:  ctxCancel,
 	}
 
 	var err error
@@ -164,10 +165,10 @@ func (ws *WebsocketConn) closeWs(text string, err error) {
 		if err != nil {
 			ws.webSocketError("websocket close error", err)
 		}
-		err = ws.conn.Close()
-		if err != nil {
-			ws.webSocketError("websocket close error", err)
-		}
+		//err = ws.conn.Close()
+		//if err != nil {
+		//	ws.webSocketError("websocket close error", err)
+		//}
 	}
 	cErr := ws.closeHandler(WebsocketCloseByServer, err.Error())
 	if cErr != nil {
@@ -212,7 +213,12 @@ func (ws *WebsocketConn) GetParm() WebsocketParm {
 	return ws.wsParm
 }
 
-//设置读超时时间
+// 获取配置
+func (ws *WebsocketConn) GetConfig() WebsocketConfig {
+	return ws.config
+}
+
+// 设置读超时时间
 func (ws *WebsocketConn) GetDeadline(t time.Duration) time.Time {
 	if t == 0 {
 		return time.Time{}
@@ -323,8 +329,8 @@ func (ws *WebsocketConn) webSocketError(text string, err error) {
 	}
 	if ws.config.Call.WebsocketError != nil {
 		ws.config.Call.WebsocketError(text, err)
-	}else {
-		fmt.Println(text + ": ", err)
+	} else {
+		fmt.Println(text+": ", err)
 	}
 }
 
@@ -336,7 +342,7 @@ func (ws *WebsocketConn) sendWait() {
 		default:
 			if atomic.LoadInt64(&ws.sendCnt) > 0 {
 				time.Sleep(5 * time.Millisecond)
-			}else{
+			} else {
 				return
 			}
 		}
